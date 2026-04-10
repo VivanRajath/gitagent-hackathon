@@ -1,0 +1,20 @@
+spec_version: "0.1.0"
+name: policy-enforcer
+version: 1.0.0
+description: >
+  Validates any pending action against the constraints defined in RULES.md.
+  Blocks actions that violate hard rules regardless of calling agent tier.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+
+runtime:
+  max_turns: 5
+  timeout: 30
+
+tags:
+  - guardrails
+  - policy
+  - safety

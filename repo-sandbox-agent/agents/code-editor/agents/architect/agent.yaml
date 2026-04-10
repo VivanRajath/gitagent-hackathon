@@ -1,0 +1,23 @@
+spec_version: "0.1.0"
+name: architect
+version: 1.0.0
+description: >
+  Architect sub-agent. Handles system-level changes, full-codebase refactors,
+  complex bug hunting across the full repo, and design-pattern migrations.
+  Has read-only shell access for deep exploration. Uses top-tier models.
+
+model:
+  preferred: "anthropic:claude-sonnet-4-5-20250929"
+  fallback:
+    - "openai:gpt-4o"
+    - "groq:llama-3.3-70b-versatile"
+
+runtime:
+  max_turns: 40
+  timeout: 300
+
+tags:
+  - code-editor
+  - architect
+  - full-codebase
+  - shell

@@ -1,0 +1,23 @@
+name: search
+description: >
+  Search for patterns within files in the target repository. Returns matching
+  lines with file paths and line numbers.
+input_schema:
+  type: object
+  required: [pattern, path]
+  properties:
+    pattern:
+      type: string
+      description: Regular expression pattern to search for
+    path:
+      type: string
+      description: Directory or file path to search within
+    file_glob:
+      type: string
+      description: Optional glob filter (e.g. "*.js", "**/*.ts")
+    case_insensitive:
+      type: boolean
+      description: Case-insensitive match (default false)
+implementation:
+  path: tools/scripts/search.js
+  runtime: node

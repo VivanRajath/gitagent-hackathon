@@ -1,0 +1,9 @@
+{
+  "name": "repo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/start.js",
+    "install:all": "npm --prefix canvas-editor install && npm --prefix generated-site install && npm --prefix repo-sandbox-agent install"
+  }
+}

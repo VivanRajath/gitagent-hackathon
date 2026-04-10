@@ -1,0 +1,23 @@
+spec_version: "0.1.0"
+name: diff-auditor
+version: 1.0.0
+description: >
+  Reviews proposed code diffs for destructive operations, injection vectors,
+  scope bleed, and safety violations before file_write is permitted.
+  Extends the code-review skill with security and safety-specific checks.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+    - "google:gemini-2.0-flash"
+
+runtime:
+  max_turns: 8
+  timeout: 45
+
+tags:
+  - guardrails
+  - diff
+  - security
+  - safety

@@ -1,0 +1,29 @@
+spec_version: "0.1.0"
+name: guardrails
+version: 1.0.0
+description: >
+  Guardrail orchestrator that intercepts actions across all subsystems.
+  Coordinates policy enforcement, secret detection, diff auditing, and
+  tier scope validation before any destructive or boundary-crossing
+  operation is permitted.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+    - "google:gemini-2.0-flash"
+
+runtime:
+  max_turns: 10
+  timeout: 60
+
+sub_agents:
+  - agents/policy-enforcer
+  - agents/secret-sentinel
+  - agents/diff-auditor
+  - agents/scope-validator
+
+tags:
+  - guardrails
+  - safety
+  - multi-agent

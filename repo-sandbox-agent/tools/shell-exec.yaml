@@ -1,0 +1,17 @@
+name: shell-exec
+description: >
+  Execute a read-only shell command (ls, find, grep, cat). Used by the
+  architect sub-agent for deep exploration only. Write commands are blocked.
+input_schema:
+  type: object
+  required: [command]
+  properties:
+    command:
+      type: string
+      description: The shell command to execute (read-only only)
+    cwd:
+      type: string
+      description: Working directory (default ".")
+implementation:
+  path: tools/scripts/shell-exec.js
+  runtime: node

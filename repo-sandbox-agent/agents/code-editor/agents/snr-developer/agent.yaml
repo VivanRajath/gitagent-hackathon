@@ -1,0 +1,22 @@
+spec_version: "0.1.0"
+name: snr-developer
+version: 1.0.0
+description: >
+  Senior developer sub-agent. Handles multi-file feature work, new route setup,
+  integration tasks, and cross-component logic. Operates within a feature
+  boundary (no full-repo scope). No shell access.
+
+model:
+  preferred: "groq:llama-3.3-70b-versatile"
+  fallback:
+    - "google:gemini-2.0-flash"
+    - "anthropic:claude-haiku-4-5-20251001"
+
+runtime:
+  max_turns: 20
+  timeout: 120
+
+tags:
+  - code-editor
+  - snr
+  - multi-file

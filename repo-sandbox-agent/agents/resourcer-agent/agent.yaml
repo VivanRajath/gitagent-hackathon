@@ -1,0 +1,27 @@
+spec_version: "0.1.0"
+name: resourcer-agent
+version: 1.0.0
+description: >
+  Finds real themed images, curated color palettes, and professional font pairings
+  for a given design theme. Queries royalty-free sources (Unsplash, Pexels,
+  Picsum, Wikimedia Commons) and the Google Fonts catalog, then returns a
+  structured resource pack that the architect embeds into the Site Blueprint.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+
+runtime:
+  max_turns: 15
+  timeout: 60
+
+skills:
+  - find-resources
+
+tags:
+  - resourcer
+  - images
+  - palette
+  - typography
+  - gitagent

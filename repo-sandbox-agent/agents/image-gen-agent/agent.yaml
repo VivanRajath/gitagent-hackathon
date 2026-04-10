@@ -1,0 +1,28 @@
+spec_version: "0.1.0"
+name: image-gen-agent
+version: 1.0.0
+description: >
+  Generates AI images and CSS animations on-demand for website components.
+  Uses Pollinations.ai (free, no API key required) for photorealistic image
+  generation based on architect-provided prompts. Also produces CSS keyframe
+  animation strings (flicker, float, glitch, pulse, etc.) tailored to the
+  site's visual theme.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+
+runtime:
+  max_turns: 15
+  timeout: 60
+
+skills:
+  - generate-images
+
+tags:
+  - image-generation
+  - ai-images
+  - animations
+  - pollinations
+  - gitagent

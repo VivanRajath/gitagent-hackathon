@@ -1,0 +1,21 @@
+spec_version: "0.1.0"
+name: secret-sentinel
+version: 1.0.0
+description: >
+  Scans file paths and content for credentials, secrets, and sensitive
+  data patterns before any file_read or file_write is permitted.
+  Blocks access to env files, key files, and content containing secrets.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+
+runtime:
+  max_turns: 5
+  timeout: 30
+
+tags:
+  - guardrails
+  - security
+  - secrets

@@ -1,0 +1,19 @@
+{
+  "name": "repo-sandbox-agent",
+  "version": "1.0.0",
+  "description": "Multi-agent repo scanner and code editor — gitagent hackathon submission",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "validate": "npx gitagent validate",
+    "info": "npx gitagent info"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "gitclaw": "^1.2.1"
+  }
+}

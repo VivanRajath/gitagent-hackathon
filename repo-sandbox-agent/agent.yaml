@@ -1,0 +1,50 @@
+spec_version: "0.1.0"
+name: repo-sandbox-agent
+version: 1.0.0
+description: >
+  Multi-agent system that scans any Git repository to detect its runtime
+  and run instructions, then routes natural language code-edit requests to
+  tiered sub-agents (jnr-developer, snr-developer, architect, uiux-designer)
+  to keep LLM costs proportional to task complexity. UI/UX requests are
+  handled by the uiux-designer persona via the canvas-editor hand-tracking
+  interface. Fully compliant with the gitagent standard, running on gitclaw.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+    - "groq:llama-3.1-8b-instant"
+
+runtime:
+  max_turns: 50
+  timeout: 300
+
+skills:
+  - detect-runtime
+  - route-intent
+  - apply-edit
+  - design-ui
+  - architect-website
+  - test-site
+  - find-resources
+  - generate-images
+  - code-review
+  - run-guardrails
+  - enforce-policy
+  - scan-secrets
+  - audit-diff
+  - validate-scope
+  - run-research
+  - search-github
+  - search-devpost
+  - search-web
+  - propose-solution
+
+tags:
+  - hackathon
+  - multi-agent
+  - code-editor
+  - repo-scanner
+  - uiux-designer
+  - canvas-editor
+  - gitagent

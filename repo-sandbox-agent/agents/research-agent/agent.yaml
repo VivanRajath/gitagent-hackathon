@@ -1,0 +1,29 @@
+spec_version: "0.1.0"
+name: research-agent
+version: 1.0.0
+description: >
+  Search orchestrator that fans out queries across GitHub, Devpost, and the
+  web, then synthesizes results into a structured solution proposal. Use when
+  the user needs to find existing implementations, prior art, or inspiration
+  before writing code.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+    - "google:gemini-2.0-flash"
+
+runtime:
+  max_turns: 15
+  timeout: 120
+
+sub_agents:
+  - agents/github-searcher
+  - agents/devpost-searcher
+  - agents/web-searcher
+  - agents/solution-proposer
+
+tags:
+  - research
+  - search
+  - multi-agent

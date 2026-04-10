@@ -1,0 +1,15 @@
+name: file-write
+description: Write full content to a file. Only call after user confirms diff.
+input_schema:
+  type: object
+  required: [path, content]
+  properties:
+    path:
+      type: string
+      description: Path to the file to write
+    content:
+      type: string
+      description: Full new content of the file
+implementation:
+  path: tools/scripts/file-write.js
+  runtime: node

@@ -1,0 +1,26 @@
+spec_version: "0.1.0"
+name: site-tester
+version: 1.0.0
+description: >
+  QA sub-agent that validates generated Next.js sites. Navigates to the running
+  dev server, captures a screenshot, analyses visual output against user intent,
+  reads Next.js console errors, and forwards structured error reports to
+  snr-developer for remediation. Loops until the site is clean or max retries
+  are exhausted.
+
+model:
+  preferred: "groq:llama-3.3-70b-versatile"
+  fallback:
+    - "google:gemini-2.0-flash"
+    - "anthropic:claude-haiku-4-5-20251001"
+
+runtime:
+  max_turns: 15
+  timeout: 120
+
+tags:
+  - code-editor
+  - qa
+  - site-tester
+  - next-js
+  - screenshot

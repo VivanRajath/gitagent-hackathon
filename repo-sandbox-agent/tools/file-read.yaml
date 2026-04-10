@@ -1,0 +1,12 @@
+name: file-read
+description: Read contents of a file at a given path.
+input_schema:
+  type: object
+  required: [path]
+  properties:
+    path:
+      type: string
+      description: Absolute or relative path to the file
+implementation:
+  path: tools/scripts/file-read.js
+  runtime: node

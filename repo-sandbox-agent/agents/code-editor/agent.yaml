@@ -1,0 +1,31 @@
+spec_version: "0.1.0"
+name: code-editor
+version: 1.0.0
+description: >
+  Edit orchestrator within repo-sandbox-agent. Receives routed edit instructions
+  from the orchestrator and delegates to the appropriate tier sub-agent:
+  jnr-developer, snr-developer, architect, or uiux-designer. Does not edit
+  files directly — all edits are executed by sub-agents.
+
+model:
+  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  fallback:
+    - "groq:llama-3.3-70b-versatile"
+    - "google:gemini-2.0-flash"
+
+runtime:
+  max_turns: 30
+  timeout: 240
+
+sub_agents:
+  - agents/jnr-developer
+  - agents/snr-developer
+  - agents/architect
+  - agents/uiux-designer
+  - agents/site-tester
+
+tags:
+  - code-editor
+  - multi-agent
+  - tiered
+  - gitagent

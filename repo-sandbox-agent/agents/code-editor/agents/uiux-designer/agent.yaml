@@ -1,0 +1,33 @@
+spec_version: "0.1.0"
+name: uiux-designer
+version: 1.0.0
+description: >
+  UI/UX Designer sub-agent within the code-editor tier. Exclusively handles
+  all UI-layer changes in Next.js projects. Integrates with the canvas-editor
+  (hand-tracking tldraw interface) to accept sketch-based layout instructions
+  and generate production-ready Next.js/React/Tailwind components.
+
+model:
+  preferred: "anthropic:claude-sonnet-4-5-20250929"
+  fallback:
+    - "openai:gpt-4o"
+    - "google:gemini-2.0-flash"
+  constraints:
+    temperature: 0.3
+    max_tokens: 4096
+
+skills:
+  - ui-builder
+
+runtime:
+  max_turns: 20
+  timeout: 300
+
+tags:
+  - code-editor
+  - ui
+  - ux
+  - nextjs
+  - canvas-editor
+  - hand-tracking
+  - gitagent
