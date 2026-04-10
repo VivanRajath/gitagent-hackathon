@@ -98,7 +98,27 @@ Wait 3-5 seconds for the gesture model to load. You'll see:
 
 ---
 
-## 6. REPL Commands
+## 6. Edit Any Local Codebase
+
+The agent isn't restricted to just the generated site! It has a generalized `file_read` and `file_write` engine that allows you to point it at any relative or absolute path on your machine.
+
+**Example Usage**:
+1. Find a script on your machine you want to modify.
+2. In the REPL, paste the absolute path and your instruction:
+
+```
+you> C:\Users\Vivan Rajath\Desktop\repo\sandbox-test-python\main.py please edit this file to add a new route /gitclaw that prints out "hello"
+```
+
+The orchestrator will:
+1. Classify the intent as `feature` or `fix`.
+2. Dispatch `snr-developer`.
+3. Use `file_read` to ingest the pure code without hallucinating file locations.
+4. Synthesize the diff and write explicitly to the absolute path correctly, un-escaping multi-line outputs seamlessly.
+
+---
+
+## 7. REPL Commands
 
 | Command | Description |
 |---|---|

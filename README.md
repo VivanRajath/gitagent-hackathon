@@ -23,7 +23,14 @@ Then you can edit it by clicking elements and speaking, or by showing hand gestu
 - **Peace sign ✌️** → move your hand left/right to shift the entire site's color theme
 - **Pinch** a selected element → context menu appears (edit text, redesign, change color)
 
----
+### Editing Any Local Repository
+You are not limited to just the generated site. You can paste an absolute path to any file on your computer and instruct the agent to fix or refactor it:
+
+```
+you> C:\Users\Vivan Rajath\Desktop\repo\sandbox-test-python\main.py update this feature 
+```
+
+The orchestrator will intelligently route this instruction to the developer squad (`snr-developer` or `jnr-developer`), load the pure source code via `file_read`, apply the minimal requested change, and safely update the external file via `file_write` while escaping JSON parameters accurately.
 
 ## The gitagent Standard
 
