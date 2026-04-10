@@ -195,11 +195,13 @@ A single BLOCK from any sub-agent halts the entire action.
 
 #### 3.6.1 `jnr-developer`
 - **Scope**: Exactly 1 file. Typo fixes, single-function rewrites, isolated style changes, small bug patches.
+- **Universal Edit**: Can edit arbitrary files in external local repositories if given an absolute path.
 - **Personality**: "Get in, fix it, get out." No opinions on architecture.
 - **Escalation**: If the fix requires touching a second file → escalate to `snr-developer`.
 
 #### 3.6.2 `snr-developer`
 - **Scope**: Multi-file features, new routes, cross-component integration. Sees the feature boundary but not full architecture.
+- **Universal Edit**: Capable of reading and rewriting files outside of the `generated-site` boundary given an absolute path.
 - **Mandatory Output**: Emits an `[SNR SPLIT]` block before any writes listing all target files and feature scope. Parsed by `index.js` for observable logging.
 - **Escalation**: Systemic architecture changes → escalate to `architect`. Purely UI layout → hand off to `uiux-designer`.
 - **Fix Target**: Receives structured error reports from `site-tester` for post-generation fixes.

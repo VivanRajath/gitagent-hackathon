@@ -128,7 +128,7 @@ The orchestrator will:
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Issue | Cause | Fix |
 |---|---|---|
