@@ -12,6 +12,10 @@ process.stdin.setEncoding("utf-8");
 for await (const chunk of process.stdin) raw += chunk;
 
 let { path: filePath, content } = JSON.parse(raw);
+if (typeof content === "string") {
+  content = content.replace(/\\n/g, "\n").replace(/\\"/g, '"');
+}
+process.stderr.write(`\n[DEBUG-WRITE] path=${filePath}\ncontent=${content}\n`);
 
 // If the agent passes a relative path (e.g. "src/components/Navbar.tsx"),
 // anchor it to the outer generated-site — never to CWD.

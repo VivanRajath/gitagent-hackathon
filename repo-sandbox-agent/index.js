@@ -40,7 +40,7 @@ function classifyIntent(prompt) {
   if (/\b(visual editor|canvas|hand (draw|track)|draw the ui|edit visually|open editor)\b/.test(p)) return "visual";
   if (/\b(refactor|redesign|restructure|migrate|overhaul|rethink|full rewrite)\b/.test(p)) return "arch";
   if (/\b(fix|debug|repair|broken|error|crash|bug|issue)\b/.test(p)) return "fix";
-  if (/\b(add|implement|extend|feature|new route|new page|integrate)\b/.test(p)) return "feature";
+  if (/\b(add|implement|extend|feature|new route|new page|integrate|update|change|modify|edit)\b/.test(p)) return "feature";
   return "chat";
 }
 
@@ -911,7 +911,7 @@ const TOOLS = [
   }),
   makeScriptTool({
     name: "file_write",
-    description: "Write full content to a file. Only call after user confirms diff.",
+    description: "Write full content to a file. You must provide the complete file content.",
     inputSchema: { type: "object", required: ["path", "content"], properties: { path: { type: "string" }, content: { type: "string" } } },
     scriptFile: "scripts/file-write.js",
   }),
@@ -1059,8 +1059,8 @@ URL pattern: https://image.pollinations.ai/prompt/[theme+keywords+cinematic]?wid
 Always add &seed= with a random 5-digit number — this caches the image so it loads instantly on repeat visits.
 Example: https://image.pollinations.ai/prompt/spongebob+underwater+city+cinematic?width=1600&height=900&nologo=true&seed=73421
 
-STEP 1 — file_write ${GENERATED_SITE}/src/app/site-content.ts
-  Write the full SITE object immediately — no preamble, no explanation, just call file_write:
+STEP 1 — write the data file ${GENERATED_SITE}/src/app/site-content.ts
+  Write the full SITE object immediately — no preamble, no explanation, just use the writing tool:
   export const SITE = {
     navbar: { brand: "...", links: [{label:"...",href:"/..."},...] },
     hero: { headline:"...", subtext:"...", cta1:"...", cta2:"...", imageUrl:"https://image.pollinations.ai/prompt/..." },
@@ -1085,17 +1085,24 @@ STEP 2 — file_read globals.css → replace ONLY the :root { } block → file_w
   GLOBALS.CSS — ABSOLUTE RULES:
   ✅ You MAY edit: the :root { } block only (CSS variables)
   ❌ NEVER delete anything below the :root block
-  ❌ NEVER rewrite the entire file — always file_read first, change ONLY :root { }
+  ❌ NEVER rewrite the entire file — always read it first, change ONLY :root { }
   ❌ NEVER add body{} or @keyframes — they already exist below :root
   ❌ NEVER write "/* rest of the file remains unchanged */" or "..." — write the FULL file or only :root
   ❌ NEVER use \n escape sequences — use real newlines
   The file is 100+ lines. If you see it's shorter, restore it — do NOT overwrite.
 
 STEP 3 — launch_frontend("http://localhost:3000")
-  That is the FINAL step. Do NOT call qa_site, do NOT call file_read after launching.
+  That is the FINAL step. Do NOT call qa_site, do NOT read files after launching.
   The site is scaffold-protected — all component files are correct. Just launch and stop.
 
-== CODE EDIT ("fix/add/refactor") == file_read target → minimal change → file_write
+== CODE EDIT ("fix/add/refactor") ==
+When the user references a file path outside the generated-site directory:
+1. Load the target file at the EXACT path provided by the user using the available read tool.
+2. Apply the requested change — minimal edit, do not rewrite unrelated code.
+3. Write the updated content to the EXACT same path using the available write tool.
+4. Always use ABSOLUTE paths as given by the user. Do NOT rewrite paths to generated-site.
+CRITICAL JSON RULE: When providing the "content" argument to the write tool, you MUST properly escape all newlines as \n and quotes as \". Do NOT use raw line breaks inside the JSON string.
+This mode works for ANY language (Python, JavaScript, TypeScript, etc.) — not just Next.js.
 == CANVAS / PREVIEW == launch_frontend(:3000)
 == SPATIAL EDITOR == launch_frontend(:3001)
 
@@ -1105,7 +1112,6 @@ ABSOLUTE RULES — violating any of these breaks the build:
 - NEVER use next/image — always plain <img src="...">
 - NEVER import from lib/animations or any path that is not lucide-react, framer-motion, or next/link
 - Image values in site-content.ts must be plain URL strings — never function calls
-TOOLS: file_read file_write launch_frontend append_memory
 DO NOT call qa_site, fetch_images, or shell_exec during website theming — they are not part of the workflow.
 
 ${AGENT_MEMORY ? "== MEMORY: KNOWN ERRORS (mandatory — violations cause build failures) ==\n" + AGENT_MEMORY : ""}`;
@@ -1388,18 +1394,21 @@ async function runAgent(prompt) {
 
   const intentTools = {
     website: pick("file_read", "file_write", "fetch_images", "launch_frontend", "append_memory"),
-    fix:     pick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
-    feature: pick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
-    arch:    pick("file_read", "file_write", "search", "shell_exec", "qa_site", "launch_frontend", "append_memory"),
+    fix:     pick("file_read", "file_write", "append_memory"),
+    feature: pick("file_read", "file_write", "append_memory"),
+    arch:    pick("file_read", "file_write", "search", "shell_exec", "append_memory"),
     visual:  pick("launch_frontend", "append_memory"),
     chat:    [],
   };
   const activeTools = intentTools[intent] ?? TOOLS;
 
+  // Use llama-3.3-70b for tool-calling intents — Llama 4 Scout mangles function call format
+  const editModel = intent === "website" ? MODEL : "groq:llama-3.3-70b-versatile";
+
   for await (const msg of query({
     prompt,
     dir: __dirname,
-    model: MODEL,
+    model: editModel,
     tools: activeTools,
     replaceBuiltinTools: true,
     systemPrompt: SYSTEM_PROMPT,
@@ -1453,7 +1462,7 @@ async function runAgent(prompt) {
         } else if (msg.toolName === "file_write") {
           const filePath = msg.args?.path ?? "";
           const fileName = path.basename(filePath);
-          logEvent("SNR-DEV", `Writing → ${fileName}`, "✍️", C.cyan);
+          logEvent("SNR-DEV", `Writing → ${filePath}`, "✍️", C.cyan);
         } else if (msg.toolName === "file_read") {
           const fileName = path.basename(msg.args?.path ?? "");
           process.stderr.write(`${C.dim}[→ file_read] ${fileName}${C.reset}\n`);

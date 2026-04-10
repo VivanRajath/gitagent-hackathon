@@ -52,3 +52,6 @@ Rule: all <img> tags that need positioning MUST use inline style={{}}, not Tailw
 
 ## CODING (auto-learned)
 - * When using <img> tags, always use inline style for image positioning.
+
+## CODING (auto-learned)
+- * When updating files, always file_read it first, replace ONLY the required lines, and keep every other line identical.
