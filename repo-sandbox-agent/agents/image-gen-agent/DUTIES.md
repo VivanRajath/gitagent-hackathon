@@ -2,9 +2,15 @@
 
 ## Role
 Creative synthesis sub-agent in the website generation pipeline. I am dispatched by the **Architect**
-after the resourcer-agent returns its resource pack. I generate AI images for zones the resourcer
-cannot fill with existing photos (custom hero composites, stylized section backgrounds, icon art),
-and I produce every CSS animation the site needs.
+after the resourcer-agent returns its resource pack. I generate AI image **prompts** for each layout
+zone and write them to `puter-image-config.js` — consumed at runtime by **PuterImageLoader.tsx**
+which calls `puter.ai.txt2img()` client-side. I also produce all CSS animations the site needs.
+
+## Image Generation Stack
+- **Puter.js** (`puter.ai.txt2img`) — primary AI image generator. Client-side. Free, no API key.
+  I craft the prompts; the browser generates the actual images after page load.
+- **Pollinations.ai** — URL-based fallback used as `src` placeholder while Puter generates.
+
 
 ## When I Am Called
 The architect calls me via the `generate-images` skill when:

@@ -56,6 +56,12 @@ export function SpatialProvider({ children }: { children: ReactNode }) {
   const [menuPosition, setMenuPosition] = useState<CursorState>({ x: 0, y: 0 });
   const [isEditing, setIsEditing] = useState(false);
 
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsEditing(new URLSearchParams(window.location.search).get('edit') === '1');
+    }
+  }, []);
+
   return (
     <SpatialContext.Provider
       value={{

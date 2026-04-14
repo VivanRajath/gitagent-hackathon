@@ -80,7 +80,7 @@ export default function HandTracker({ onCursorMove, onPinch, onGesture, showFeed
           delegate: 'GPU',
         },
         runningMode: 'VIDEO',
-        numHands: 1,
+        numHands: 2,
       });
 
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
@@ -109,25 +109,35 @@ export default function HandTracker({ onCursorMove, onPinch, onGesture, showFeed
         lastVideoTime = video.currentTime;
         const results = landmarker.detectForVideo(video, now);
 
-        if (results.landmarks?.length > 0) {
-          const lm = results.landmarks[0];
+        const numHands = results.landmarks?.length ?? 0;
+        // Hand colors: hand 0 = green (primary), hand 1 = cyan (secondary)
+        const HAND_COLORS = ['rgba(0,255,140,0.55)', 'rgba(0,200,255,0.55)'];
+        const DOT_COLORS  = [{ tip: 'rgba(255,60,60,0.95)', thumb: 'rgba(80,140,255,0.9)', base: 'rgba(0,255,140,0.75)' },
+                             { tip: 'rgba(255,180,0,0.95)', thumb: 'rgba(0,200,255,0.9)',  base: 'rgba(0,200,255,0.7)' }];
 
-          // ── EMA smoothing ──────────────────────────────────────────────
-          const rawX = (1 - lm[8].x) * window.innerWidth;
-          const rawY = lm[8].y * window.innerHeight;
-          smoothX.current += ALPHA * (rawX - smoothX.current);
-          smoothY.current += ALPHA * (rawY - smoothY.current);
-          onCursorMoveRef.current(smoothX.current, smoothY.current);
+        for (let h = 0; h < numHands; h++) {
+          const lm = results.landmarks[h];
 
-          // ── Gesture debounce ───────────────────────────────────────────
+          // ── EMA smoothing (hand 0 drives cursor) ──────────────────────
+          if (h === 0) {
+            const rawX = (1 - lm[8].x) * window.innerWidth;
+            const rawY = lm[8].y * window.innerHeight;
+            smoothX.current += ALPHA * (rawX - smoothX.current);
+            smoothY.current += ALPHA * (rawY - smoothY.current);
+            onCursorMoveRef.current(smoothX.current, smoothY.current);
+          }
+
+          // ── Gesture debounce (hand 0 fires gesture events) ────────────
           const g = detectGesture(lm) as Gesture;
-          onPinchRef.current(g === 'pinch');
-          if (g === lastGesture.current) {
-            gestureFrames.current++;
-            if (gestureFrames.current === GESTURE_FRAMES) onGestureRef.current?.(g);
-          } else {
-            lastGesture.current = g;
-            gestureFrames.current = 0;
+          if (h === 0) {
+            onPinchRef.current(g === 'pinch');
+            if (g === lastGesture.current) {
+              gestureFrames.current++;
+              if (gestureFrames.current === GESTURE_FRAMES) onGestureRef.current?.(g);
+            } else {
+              lastGesture.current = g;
+              gestureFrames.current = 0;
+            }
           }
 
           // ── Draw skeleton on overlay canvas ────────────────────────────
@@ -135,12 +145,14 @@ export default function HandTracker({ onCursorMove, onPinch, onGesture, showFeed
           const sh = overlay.height;
           const px = (x: number) => (1 - x) * sw;  // mirrored
           const py = (y: number) => y * sh;
+          const hc = HAND_COLORS[h] ?? HAND_COLORS[0];
+          const dc = DOT_COLORS[h]  ?? DOT_COLORS[0];
 
           // Connections
           ctx.lineWidth = 2;
           CONNECTIONS.forEach(([a, b]) => {
             ctx.beginPath();
-            ctx.strokeStyle = 'rgba(0, 255, 140, 0.55)';
+            ctx.strokeStyle = hc;
             ctx.moveTo(px(lm[a].x), py(lm[a].y));
             ctx.lineTo(px(lm[b].x), py(lm[b].y));
             ctx.stroke();
@@ -150,9 +162,9 @@ export default function HandTracker({ onCursorMove, onPinch, onGesture, showFeed
           lm.forEach((p: any, i: number) => {
             const x = px(p.x);
             const y = py(p.y);
-            let r = 3, color = 'rgba(0,255,140,0.75)';
-            if (i === 8)  { r = 8;  color = 'rgba(255,60,60,0.95)'; }   // index tip
-            else if (i === 4) { r = 7; color = 'rgba(80,140,255,0.9)'; } // thumb tip
+            let r = 3, color = dc.base;
+            if (i === 8)  { r = 8;  color = dc.tip;   }
+            else if (i === 4) { r = 7; color = dc.thumb; }
             else if ([0,5,9,13,17].includes(i)) { r = 4; }
             ctx.beginPath();
             ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -165,7 +177,7 @@ export default function HandTracker({ onCursorMove, onPinch, onGesture, showFeed
             ctx.beginPath();
             ctx.moveTo(px(lm[4].x), py(lm[4].y));
             ctx.lineTo(px(lm[8].x), py(lm[8].y));
-            ctx.strokeStyle = 'rgba(220, 80, 255, 0.85)';
+            ctx.strokeStyle = h === 0 ? 'rgba(220,80,255,0.85)' : 'rgba(255,180,0,0.85)';
             ctx.lineWidth = 3;
             ctx.stroke();
           }
@@ -173,8 +185,7 @@ export default function HandTracker({ onCursorMove, onPinch, onGesture, showFeed
           // Gesture label next to index tip
           if (g !== 'point') {
             ctx.font = 'bold 13px monospace';
-            ctx.fillStyle = 'rgba(255,255,255,0.9)';
-            const label = g.replace('_', ' ');
+            const label = `${h === 1 ? '2:' : ''}${g.replace('_', ' ')}`;
             const tx = px(lm[8].x) + 14;
             const ty = py(lm[8].y) - 4;
             ctx.fillStyle = 'rgba(0,0,0,0.5)';

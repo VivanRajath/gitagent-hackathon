@@ -18,6 +18,7 @@ export default function Card({ index }: { index: number }) {
         e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)';
       }}>
       <img src={card.imageUrl} alt={card.title}
+        data-puter-zone={`card-${index}`}
         style={{width:'100%',height:'11rem',objectFit:'cover',display:'block',
           backgroundColor:'var(--color-primary)'}}/>
       <div style={{padding:'1.35rem'}}>

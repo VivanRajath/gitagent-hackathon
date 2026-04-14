@@ -1,0 +1,77 @@
+[
+  {
+    "id": 0,
+    "name": "Eternal Night",
+    "palette": {
+      "primary": "#661111",
+      "secondary": "#cc0055",
+      "bg": "#221111",
+      "text": "#eeeeee"
+    },
+    "fontDisplay": "'Bloodscript',sans-serif",
+    "animationStyle": "glitch",
+    "spacingScale": "compact",
+    "shadowStyle": "neon",
+    "previewGradient": "linear-gradient(135deg,#440033 0%,#a60077 100%)"
+  },
+  {
+    "id": 1,
+    "name": "Vampire's Kiss",
+    "palette": {
+      "primary": "#ff99cc",
+      "secondary": "#ff66b3",
+      "bg": "#ffe6f2",
+      "text": "#666666"
+    },
+    "fontDisplay": "'Pacifico',sans-serif",
+    "animationStyle": "fade-in-up",
+    "spacingScale": "normal",
+    "shadowStyle": "soft",
+    "previewGradient": "linear-gradient(135deg,#ffd7e6 0%,#ffe0cc 100%)"
+  },
+  {
+    "id": 2,
+    "name": "Neon Crypt",
+    "palette": {
+      "primary": "#39ff14",
+      "secondary": "#00ffff",
+      "bg": "#0a0a0a",
+      "text": "#33ccff"
+    },
+    "fontDisplay": "'Digital-7',sans-serif",
+    "animationStyle": "neon-glow",
+    "spacingScale": "airy",
+    "shadowStyle": "neon",
+    "previewGradient": "linear-gradient(135deg,#00ff00 0%,#0077ff 100%)"
+  },
+  {
+    "id": 3,
+    "name": "Mortal's Fear",
+    "palette": {
+      "primary": "#664400",
+      "secondary": "#996633",
+      "bg": "#332200",
+      "text": "#cccccc"
+    },
+    "fontDisplay": "'Rock Salt',sans-serif",
+    "animationStyle": "flicker",
+    "spacingScale": "compact",
+    "shadowStyle": "flat",
+    "previewGradient": "linear-gradient(135deg,#774400 0%,#663300 100%)"
+  },
+  {
+    "id": 4,
+    "name": "Bloodlust",
+    "palette": {
+      "primary": "#ff0033",
+      "secondary": "#cc0000",
+      "bg": "#330000",
+      "text": "#ffffff"
+    },
+    "fontDisplay": "'Bebas Neue',sans-serif",
+    "animationStyle": "float",
+    "spacingScale": "normal",
+    "shadowStyle": "soft",
+    "previewGradient": "linear-gradient(135deg,#ff0033 0%,#ff6600 100%)"
+  }
+]

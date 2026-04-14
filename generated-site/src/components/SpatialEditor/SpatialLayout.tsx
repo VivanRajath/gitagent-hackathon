@@ -85,31 +85,11 @@ function HintBanner() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Inner engine — consumes context
 // ─────────────────────────────────────────────────────────────────────────────
-function EditModeToggle() {
-  const { isEditing, setIsEditing } = useSpatial();
-  return (
-    <button
-      onClick={() => setIsEditing(!isEditing)}
-      className={`fixed top-4 right-4 z-[9999] flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 shadow-lg ${
-        isEditing
-          ? 'bg-fuchsia-600 text-white shadow-fuchsia-500/40 shadow-xl'
-          : 'bg-black/70 text-white/70 border border-white/20 backdrop-blur-md hover:bg-black/90 hover:text-white'
-      }`}
-    >
-      <span className={`w-2 h-2 rounded-full ${isEditing ? 'bg-white animate-pulse' : 'bg-white/40'}`} />
-      {isEditing ? 'Exit Edit Mode' : 'Edit Mode'}
-    </button>
-  );
-}
-
 function SpatialEngine({ children }: { children: React.ReactNode }) {
   const { setCursor, setIsPinching, activeTheme, isEditing } = useSpatial();
 
   return (
     <div data-theme={activeTheme} className="min-h-screen transition-[background-color,color] duration-700">
-
-      {/* Edit mode toggle — always visible */}
-      <EditModeToggle />
 
       {/* Hand tracking and editing UI — only active when isEditing */}
       {isEditing && (

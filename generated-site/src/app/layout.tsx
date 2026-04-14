@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import SpatialVoiceOverlay from '../components/SpatialVoiceOverlay';
+import PuterImageLoader from '../components/PuterImageLoader';
 
 export const metadata: Metadata = { title: 'My Site' };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning={true}>
         {children}
         <SpatialVoiceOverlay />
+        <PuterImageLoader />
       </body>
     </html>
   );

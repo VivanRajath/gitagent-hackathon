@@ -26,7 +26,17 @@ const C = {
 function logEvent(role, message, emojiIgnored = "", color = C.cyan) {
   const ts = new Date().toTimeString().slice(0, 8);
   process.stderr.write(
-    `${C.dim}[${ts}]${C.reset} ${color}${C.bold}[${role.padEnd(10)}]${C.reset} ${message}\n`
+    `${C.dim}[${ts}]${C.reset} ${color}${C.bold}[${role.padEnd(12)}]${C.reset} ${message}\n`
+  );
+}
+
+// ── logHandoff — shows agent-to-agent delegation in logs ──────────────────────
+function logHandoff(fromRole, toRole, reason) {
+  const ts = new Date().toTimeString().slice(0, 8);
+  process.stderr.write(
+    `${C.dim}[${ts}] ━━ handoff: ${C.reset}${C.bold}${fromRole}${C.reset}` +
+    ` ${C.dim}──▶${C.reset} ${C.bold}${toRole}${C.reset}` +
+    (reason ? ` ${C.dim}(${reason})${C.reset}` : '') + '\n'
   );
 }
 
@@ -34,6 +44,9 @@ function logEvent(role, message, emojiIgnored = "", color = C.cyan) {
 // Returns: "website" | "fix" | "feature" | "arch" | "visual" | "chat"
 function classifyIntent(prompt) {
   const p = prompt.toLowerCase();
+  // AgentBridge variation/commit prompts must never become website builds
+  if (p.startsWith("[agent-bridge]") || p.startsWith("you are a ui code generator") ||
+      p.startsWith("you are the jnr-developer persona")) return "feature";
   if (p.includes("[pinch-edit") || p.includes("[delete-node") || p.includes("[swipe")) return "website";
   if (/\b(website|landing page|site|make|create|build|theme|generate|themed)\b/.test(p) &&
     !/\bfix\b|\bdebug\b/.test(p)) return "website";
@@ -52,15 +65,13 @@ function loadMemory() {
 }
 const AGENT_MEMORY = loadMemory();
 
-// ── Restore golden component templates if missing ──────────────────────────────
-// Components are permanent scaffolds. If deleted by accident, restore them here.
+// ── Restore critical scaffolding (CSS + layout — NOT component TSX files) ──────
+// Component .tsx files are the design system — agents choose layouts via site-content.ts variants.
+// Only restore layout.tsx + globals.css scaffolding if they're broken.
 import { writeFileSync, mkdirSync } from "fs";
-function restoreComponents() {
-  const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "generated-site", "src");
-  const comps = path.join(site, "components");
-  mkdirSync(comps, { recursive: true });
 
-  const FULL_GLOBALS_CSS_TEMPLATE = `@import "tailwindcss";
+// Module-level so buildWebsiteDirect can also use it for full CSS reset
+const FULL_GLOBALS_CSS_TEMPLATE = `@import "tailwindcss";
 
 :root {
   --color-primary: #4a1942;
@@ -178,6 +189,11 @@ body {
   }
 }
 `;
+
+function restoreComponents() {
+  const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "generated-site", "src");
+  const comps = path.join(site, "components");
+  mkdirSync(comps, { recursive: true });
 
   const templates = {
     "Navbar.tsx": `'use client';
@@ -710,13 +726,11 @@ export default function SpatialVoiceOverlay() {
 }`,
   };
 
-  for (const [name, content] of Object.entries(templates)) {
-    const filePath = path.join(comps, name);
-    if (!existsSync(filePath)) {
-      writeFileSync(filePath, content, "utf-8");
-      process.stderr.write(`[restore] Wrote missing ${name}\n`);
-    }
-  }
+  // NOTE: We do NOT restore component TSX files from templates.
+  // The design system (Navbar/Hero/CardSection/etc.) has 5 variants each and
+  // agents choose layouts via the variants object in site-content.ts.
+  // Restoring old single-variant templates would break the design system.
+  void templates; // keep templates defined for reference but don't write
 
   // Restore layout.tsx — always keep this exact structure, never let agent overwrite
   const layoutFile = path.join(site, "app", "layout.tsx");
@@ -725,6 +739,7 @@ export default function SpatialVoiceOverlay() {
     writeFileSync(layoutFile, `import type { Metadata } from 'next';
 import './globals.css';
 import SpatialVoiceOverlay from '../components/SpatialVoiceOverlay';
+import PuterImageLoader from '../components/PuterImageLoader';
 
 export const metadata: Metadata = { title: 'My Site' };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -738,11 +753,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning={true}>
         {children}
         <SpatialVoiceOverlay />
+        <PuterImageLoader />
       </body>
     </html>
   );
 }`, "utf-8");
-    process.stderr.write("[restore] Rebuilt broken layout.tsx with Spatial Overlay\n");
+    process.stderr.write("[restore] Rebuilt broken layout.tsx with Spatial Overlay + PuterImageLoader\n");
   }
 
   // Always validate globals.css — fix it every startup if broken
@@ -772,22 +788,52 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     process.stderr.write("[restore] Rebuilt broken globals.css — placeholder or missing @keyframes detected\n");
   }
 
-  // Restore site-content.ts if missing
+  // Restore site-content.ts if missing OR if imageUrls are corrupted
+  // (AgentBridge prompts sometimes get embedded into Pollinations URLs — detect + auto-fix)
   const contentFile = path.join(site, "app", "site-content.ts");
-  if (!existsSync(contentFile)) {
+  const contentIsBroken = (() => {
+    if (!existsSync(contentFile)) return true;
+    const src = readFileSync(contentFile, "utf-8");
+    // Corrupted: imageUrl longer than 400 chars, contains spaces/prose, or prompt text
+    const urlMatches = [...src.matchAll(/imageUrl\s*:\s*["']([^"']+)["']/g)];
+    return urlMatches.some(m => m[1].length > 400 || / [a-z]{4,} /.test(m[1]) || m[1].includes("you+are") || m[1].includes("persona"));
+  })();
+  if (contentIsBroken) {
     writeFileSync(contentFile, `export const SITE = {
-  navbar: { brand: "My Site", links: [{label:"Home",href:"/"}] },
-  hero: { headline:"Welcome", subtext:"A great place to start.", cta1:"Get Started", cta2:"Learn More", imageUrl:"https://image.pollinations.ai/prompt/abstract+cinematic+dark?width=1600&height=900&nologo=true" },
-  cards: [{title:"Feature One",desc:"An amazing feature.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+portrait?width=400&height=300&nologo=true"},{title:"Feature Two",desc:"Another great aspect.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+landscape?width=400&height=300&nologo=true"}],
+  navbar: { brand: "My Site", links: [{label:"Home",href:"/"},{label:"About",href:"/about"},{label:"Contact",href:"/contact"}] },
+  hero: { headline:"Welcome", subtext:"A great place to start.", cta1:"Get Started", cta2:"Learn More", imageUrl:"https://image.pollinations.ai/prompt/abstract+cinematic+dark?width=1600&height=900&nologo=true&seed=73421" },
+  cards: [
+    {title:"Feature One",desc:"An amazing feature.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+portrait?width=400&height=300&nologo=true&seed=11111"},
+    {title:"Feature Two",desc:"Another great aspect.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+landscape?width=400&height=300&nologo=true&seed=22222"},
+    {title:"Feature Three",desc:"Built for the future.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+product?width=400&height=300&nologo=true&seed=33333"},
+  ],
   features: { sectionTitle:"Why This Stands Out", items:[{icon:"⭐",title:"Quality",desc:"Built with care."},{icon:"🚀",title:"Speed",desc:"Fast and smooth."},{icon:"🎨",title:"Design",desc:"Beautiful visuals."},{icon:"🔒",title:"Reliable",desc:"Always dependable."}] },
-  cta: { headline:"Ready to Begin?", body:"Take the next step.", button:"Start Now", imageUrl:"https://image.pollinations.ai/prompt/cinematic+epic+wide?width=1200&height=400&nologo=true" },
-  footer: { brand:"My Site", tagline:"© 2025 All rights reserved.", links:[{label:"About",href:"/about"},{label:"Contact",href:"/contact"}] },
+  cta: { headline:"Ready to Begin?", body:"Take the next step.", button:"Start Now", imageUrl:"https://image.pollinations.ai/prompt/cinematic+epic+wide?width=1200&height=400&nologo=true&seed=55555" },
+  footer: { brand:"My Site", tagline:"Building the future, one pixel at a time.", links:[{label:"About",href:"/about"},{label:"Contact",href:"/contact"}] },
+  variants: { navbar:0, hero:0, cards:0, features:0, cta:0, footer:0 },
 };`, "utf-8");
-    process.stderr.write("[restore] Wrote missing site-content.ts\n");
+    process.stderr.write("[restore] Rebuilt corrupted site-content.ts (bad imageUrl detected)\n");
   }
 }
 restoreComponents();
 
+// ── Component snapshots — taken once at startup, restored before each new build ──
+// This ensures a new website build never inherits modifications from previous
+// agent feature requests (CSS residue, hardcoded content, layout drift).
+const _COMP_DIR = path.join(
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "generated-site", "src"),
+  "components"
+);
+const _COMP_FILES = [
+  "Navbar.tsx", "Hero.tsx", "CardSection.tsx", "Card.tsx",
+  "FeatureStrip.tsx", "CTABanner.tsx", "Footer.tsx",
+];
+const COMPONENT_SNAPSHOTS = {};
+for (const f of _COMP_FILES) {
+  const fp = path.join(_COMP_DIR, f);
+  if (existsSync(fp)) COMPONENT_SNAPSHOTS[f] = readFileSync(fp, "utf-8");
+}
+process.stderr.write(`[snapshot] ${Object.keys(COMPONENT_SNAPSHOTS).length} component baselines captured\n`);
 
 // Patch fetch to cap max_tokens on Groq requests (free-tier 12k TPM limit).
 const _origFetch = globalThis.fetch;
@@ -819,6 +865,138 @@ try {
 } catch { /* .env is optional */ }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ── Multi-org Groq key pool ───────────────────────────────────────────────────
+// Reads GROQ_API_KEY_1…5 from .env (falls back to GROQ_API_KEY for compat).
+// Round-robins across all configured keys; on 429 marks the key as cooling down
+// and immediately retries with the next available key.
+const KEY_POOL = (() => {
+  const pool = [];
+  // Collect all numbered keys
+  for (let i = 1; i <= 5; i++) {
+    const val = process.env[`GROQ_API_KEY_${i}`]?.trim();
+    if (val) pool.push({ key: val, label: `org-${i}`, cooldownUntil: 0, uses: 0, errors: 0 });
+  }
+  // Backward-compat: plain GROQ_API_KEY if no numbered keys found
+  if (pool.length === 0) {
+    const val = process.env.GROQ_API_KEY?.trim();
+    if (val) pool.push({ key: val, label: "org-1", cooldownUntil: 0, uses: 0, errors: 0 });
+  }
+  if (pool.length === 0) throw new Error("No Groq API keys found. Set GROQ_API_KEY_1 … GROQ_API_KEY_5 in .env");
+  process.stderr.write(`[keypool] ${pool.length} key(s) loaded: ${pool.map(k => k.label).join(", ")}\n`);
+  return pool;
+})();
+
+let _poolIdx = 0; // round-robin cursor
+
+/** Return the next available (not rate-limited) key entry.
+ *  If every key is on cooldown, sleeps until the soonest one recovers. */
+async function getKey() {
+  const now = Date.now();
+  // Try each key in round-robin order
+  for (let i = 0; i < KEY_POOL.length; i++) {
+    const idx = (_poolIdx + i) % KEY_POOL.length;
+    const entry = KEY_POOL[idx];
+    if (entry.cooldownUntil <= now) {
+      _poolIdx = (idx + 1) % KEY_POOL.length; // advance cursor for next call
+      return entry;
+    }
+  }
+  // All keys cooling — wait for the soonest one
+  const soonest = KEY_POOL.reduce((a, b) => a.cooldownUntil < b.cooldownUntil ? a : b);
+  const wait = Math.max(0, soonest.cooldownUntil - Date.now());
+  logEvent("KEYPOOL", `All ${KEY_POOL.length} keys rate-limited — waiting ${(wait/1000).toFixed(1)}s for ${soonest.label}`, "⏳", C.red);
+  await new Promise(r => setTimeout(r, wait + 200));
+  soonest.cooldownUntil = 0;
+  return soonest;
+}
+
+/** Mark a key as rate-limited; parse retry-after from response headers if present. */
+function coolKey(entry, headers) {
+  const retryAfter = parseInt(headers?.get?.("retry-after") ?? headers?.["retry-after"] ?? "60", 10);
+  const secs = isNaN(retryAfter) ? 60 : Math.max(retryAfter, 5);
+  entry.cooldownUntil = Date.now() + secs * 1000;
+  entry.errors++;
+  logEvent("KEYPOOL", `${entry.label} rate-limited (429) — cooldown ${secs}s`, "🔴", C.red);
+  // Move cursor past this key
+  const idx = KEY_POOL.indexOf(entry);
+  _poolIdx = (idx + 1) % KEY_POOL.length;
+}
+
+/** Print key-pool status to stderr (called by /key-status endpoint). */
+function keyPoolStatus() {
+  const now = Date.now();
+  return KEY_POOL.map(e => ({
+    label:       e.label,
+    uses:        e.uses,
+    errors:      e.errors,
+    status:      e.cooldownUntil > now
+      ? `COOLING (${((e.cooldownUntil - now) / 1000).toFixed(1)}s)`
+      : "READY",
+  }));
+}
+
+// ── Agent directory roots ────────────────────────────────────────────────────
+const AGENTS_DIR_ROOT = path.join(__dirname, "agents");
+
+// ── Load an agent's identity context from SOUL.md / DUTIES.md / SKILL.md ─────
+function loadAgentContext(agentDir) {
+  return ['SOUL.md', 'DUTIES.md', 'SKILL.md', 'RULES.md']
+    .map(f => {
+      try { return readFileSync(path.join(agentDir, f), 'utf-8').trim(); }
+      catch { return ''; }
+    })
+    .filter(Boolean)
+    .join('\n\n---\n\n');
+}
+
+// ── Synchronous guardrails — runs before every file_write (no LLM call) ───────
+// Returns { verdict: "ALLOW"|"BLOCK", agent?, reason?, checked_by? }
+function guardrailsSync(filePath, content) {
+  const fp  = filePath ?? '';
+  const ct  = content  ?? '';
+  const bn  = path.basename(fp);
+
+  // policy-enforcer: only lock UX infrastructure — design components are writable
+  const LOCKED = [
+    'layout.tsx', 'page.tsx',
+    'SpatialVoiceOverlay.tsx', 'SpatialLayout.tsx', 'SpatialTarget.tsx',
+    'SpatialEditor.tsx', 'SpatialContext.tsx', 'AgentBridge.ts',
+  ];
+  if (LOCKED.includes(bn))
+    return { verdict:'BLOCK', agent:'policy-enforcer',
+             reason:`${bn} is locked UX infrastructure — agents should write site-content.ts instead` };
+
+  // secret-sentinel: blocked file extensions
+  if (/\.(env|pem|key|pfx|p12|secret)$/.test(fp))
+    return { verdict:'BLOCK', agent:'secret-sentinel',
+             reason:`Writes to *${path.extname(fp)} files are blocked` };
+
+  // secret-sentinel: credential patterns in content
+  if (/(?:GROQ_API_KEY|API_KEY|SECRET_KEY|PASSWORD|PRIVATE_KEY)\s*[=:]\s*["'][^"']{8,}/i.test(ct))
+    return { verdict:'BLOCK', agent:'secret-sentinel',
+             reason:'Potential secret/credential pattern in file content' };
+
+  // diff-auditor: dangerous shell patterns
+  if (/(?:rm\s+-rf\s+\/|>\s*\/etc\/|chmod\s+777|eval\s*\(process\.env)/.test(ct))
+    return { verdict:'BLOCK', agent:'diff-auditor',
+             reason:'Dangerous shell/eval pattern detected in content' };
+
+  return {
+    verdict: 'ALLOW',
+    checked_by: ['policy-enforcer','secret-sentinel','diff-auditor','scope-validator'],
+  };
+}
+
+// ── Classify intent into a code-editor tier ──────────────────────────────────
+function classifyTier(intent, prompt) {
+  const p = prompt.toLowerCase();
+  if (intent === 'arch') return 'architect';
+  if (/\b(ui|component|layout|tailwind|css|design|visual|color|font|style)\b/.test(p)) return 'uiux';
+  if (/\b(all|entire|every|across|multiple|multi|files|routes|pages)\b/.test(p)) return 'snr';
+  if (intent === 'fix' && !/\b(all|multiple|routes|pages)\b/.test(p)) return 'jnr';
+  return 'snr';
+}
 
 // ── Active model ──────────────────────────────────────────────────────────────
 // Groq free-tier daily TPD limits are PER MODEL — each model has its own bucket.
@@ -1040,81 +1218,103 @@ const TOOLS = [
   },
 ];
 
+// ── Wrap file_write with guardrails interception ──────────────────────────────
+// Every write goes through secret-sentinel, policy-enforcer, diff-auditor,
+// scope-validator before the actual file is touched. No LLM call needed.
+{
+  const fw = TOOLS.find(t => t.name === "file_write");
+  if (fw) {
+    const _orig = fw.handler;
+    fw.handler = async (args, signal) => {
+      const fp = args?.path ?? '';
+      logEvent("GUARDRAILS", `Intercepting write → ${path.basename(fp)}…`, "🛡️", C.red);
+      const check = guardrailsSync(fp, args?.content);
+      if (check.verdict === 'BLOCK') {
+        logEvent("GUARDRAILS", `BLOCKED [${check.agent}]: ${check.reason}`, "🚫", C.red);
+        return `BLOCKED: ${check.reason}`;
+      }
+      logEvent("GUARDRAILS", `ALLOW — ${(check.checked_by ?? []).join(', ')}`, "✅", C.green);
+      return _orig(args, signal);
+    };
+  }
+}
+
 const GENERATED_SITE = path.resolve(__dirname, "..", "generated-site");
 
-const SYSTEM_PROMPT = `You are repo-sandbox-agent. You theme websites by writing ONE data file. Component files are locked — never touch them.
+const SYSTEM_PROMPT = `You are repo-sandbox-agent — a full-stack web designer backed by a research + UIUX pipeline.
 
-FILES YOU ARE ALLOWED TO EDIT:
-  content : ${GENERATED_SITE}/src/app/site-content.ts   ← THE ONLY file you write for theming
-  css     : ${GENERATED_SITE}/src/app/globals.css        ← only the :root { } block
+== DESIGN SYSTEM: HOW THE SITE WORKS ==
+The site has 6 components, each with 5 genuinely different layout variants (0–4).
+You choose variants by writing the "variants" object in site-content.ts — this changes the actual layout, not just colors.
 
-FILES YOU MUST NEVER TOUCH (auto-restored on startup — any change is overwritten anyway):
-  ${GENERATED_SITE}/src/app/layout.tsx        ← LOCKED
-  ${GENERATED_SITE}/src/app/page.tsx          ← LOCKED
-  ${GENERATED_SITE}/src/components/*.tsx      ← ALL LOCKED
+COMPONENT VARIANTS (choose based on the site type and personality):
+  navbar:   0=Classic(logo-left)   1=Centered(logo-middle)   2=Animated(typewriter logo)   3=GlassCTA(frosted+button)   4=Minimal(hamburger drawer)
+  hero:     0=Cinematic(fullbleed) 1=Split(text+img side)    2=BoldType(huge gradient text) 3=Magazine(editorial)        4=Asymmetric(dramatic glitch)
+  cards:    0=Grid(3col)           1=Carousel(scroll strip)  2=Featured(1big+smalls)        3=Masonry(staggered)         4=List(alternating rows)
+  features: 0=IconGrid             1=Numbered(01 02 03)      2=Alternating(left/right)      3=Timeline(vertical line)    4=StatCards(scroll+stats)
+  cta:      0=Fullbleed(imgbg)     1=Split(text+img)         2=Minimal(border accent)       3=GlassCard(frosted card)    4=HorizBar(banner strip)
+  footer:   0=TwoCol               1=Centered                2=Minimal(1 line)              3=BigBrand(watermark text)   4=DarkCard(raised frosted)
 
-== THEMING A WEBSITE ("create/make/theme a website for X") ==
-Do NOT call fetch_images. Construct Pollinations URLs yourself as plain strings.
-URL pattern: https://image.pollinations.ai/prompt/[theme+keywords+cinematic]?width=W&height=H&nologo=true&seed=NNNNN
-Always add &seed= with a random 5-digit number — this caches the image so it loads instantly on repeat visits.
-Example: https://image.pollinations.ai/prompt/spongebob+underwater+city+cinematic?width=1600&height=900&nologo=true&seed=73421
+Examples by site type:
+  E-commerce shop   → navbar:3 hero:1 cards:0 features:4 cta:1 footer:0
+  Creative portfolio → navbar:4 hero:4 cards:3 features:2 cta:2 footer:3
+  SaaS landing      → navbar:3 hero:2 cards:2 features:1 cta:3 footer:1
+  Restaurant/food   → navbar:1 hero:0 cards:0 features:0 cta:0 footer:1
+  Dark/gaming       → navbar:2 hero:4 cards:1 features:4 cta:0 footer:4
 
-STEP 1 — write the data file ${GENERATED_SITE}/src/app/site-content.ts
-  Write the full SITE object immediately — no preamble, no explanation, just use the writing tool:
+== FILES YOU WRITE ==
+  MAIN: ${GENERATED_SITE}/src/app/site-content.ts   ← content + variants (always set ALL 6 variant indices)
+  CSS:  ${GENERATED_SITE}/src/app/globals.css        ← only the :root { } block
+
+== LOCKED FILES (do not touch) ==
+  layout.tsx · page.tsx · SpatialVoiceOverlay.tsx · SpatialLayout.tsx · SpatialTarget.tsx
+
+== WHEN BUILDING A WEBSITE ==
+STEP 1 — Write site-content.ts with ALL sections AND variants block:
   export const SITE = {
     navbar: { brand: "...", links: [{label:"...",href:"/..."},...] },
-    hero: { headline:"...", subtext:"...", cta1:"...", cta2:"...", imageUrl:"https://image.pollinations.ai/prompt/..." },
-    cards: [{title:"...",desc:"...",imageUrl:"https://..."},{title:"...",desc:"...",imageUrl:"https://..."}],
-    features: { sectionTitle:"...", items:[{icon:"emoji",title:"...",desc:"..."},...] },
-    cta: { headline:"...", body:"...", button:"...", imageUrl:"https://..." },
+    hero: { headline:"...", subtext:"...", cta1:"...", cta2:"...",
+            imageUrl:"https://image.pollinations.ai/prompt/THEME+cinematic?width=1600&height=900&nologo=true&seed=NNNNN" },
+    cards: [
+      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene?width=400&height=300&nologo=true&seed=NNNNN"},
+      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene2?width=400&height=300&nologo=true&seed=NNNNN"},
+      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene3?width=400&height=300&nologo=true&seed=NNNNN"},
+    ],
+    features: { sectionTitle:"...", items:[
+      {icon:"emoji",title:"...",desc:"..."},
+      {icon:"emoji",title:"...",desc:"..."},
+      {icon:"emoji",title:"...",desc:"..."},
+      {icon:"emoji",title:"...",desc:"..."},
+    ]},
+    cta: { headline:"...", body:"...", button:"...",
+           imageUrl:"https://image.pollinations.ai/prompt/THEME+wide?width=1200&height=400&nologo=true&seed=NNNNN" },
     footer: { brand:"...", tagline:"...", links:[{label:"...",href:"/..."},...] },
+    variants: {
+      navbar:   N,   // 0-4 — MUST match the site personality
+      hero:     N,
+      cards:    N,
+      features: N,
+      cta:      N,
+      footer:   N,
+    },
   };
-  Rules: themed content matching the request · no imports · no JSX · plain strings only
+  Rules: themed content · Pollinations image URLs with random seeds · no imports · plain strings only
 
-STEP 2 — file_read globals.css → replace ONLY the :root { } block → file_write the full file unchanged except :root.
-  Variable names are EXACTLY: --color-primary  --color-secondary  --color-bg  --color-text  --font-display
-  NEVER use --primary, --secondary, --bg, --text — components only read --color-* names.
-  Themes:
-    Harry Potter    → --color-primary:#4a1942; --color-secondary:#c9a84c; --color-bg:#0d0d0d; --color-text:#e8d5b7; --font-display:'Cinzel',serif;
-    Iron Man        → --color-primary:#b91c1c; --color-secondary:#f59e0b; --color-bg:#111827; --color-text:#f3f4f6; --font-display:'Orbitron',sans-serif;
-    Captain America → --color-primary:#1a3a6b; --color-secondary:#c8a951; --color-bg:#0d0d0d; --color-text:#e8e0c8; --font-display:'Oswald',sans-serif;
-    SpongeBob       → --color-primary:#e88c00; --color-secondary:#ffe44d; --color-bg:#003f7f; --color-text:#fff9e6; --font-display:'Bangers',cursive;
-    Stranger Things → --color-primary:#8b0000; --color-secondary:#e50914; --color-bg:#0a0a0a; --color-text:#e8d5b7; --font-display:'Courier New',monospace;
-    Cyberpunk       → --color-primary:#7c3aed; --color-secondary:#06b6d4; --color-bg:#030712; --color-text:#e2e8f0; --font-display:'Share Tech Mono',monospace;
-    Wakanda         → --color-primary:#4f1c87; --color-secondary:#c0a060; --color-bg:#0a0a0f; --color-text:#e8e0c8; --font-display:'Cinzel',serif;
-  GLOBALS.CSS — ABSOLUTE RULES:
-  ✅ You MAY edit: the :root { } block only (CSS variables)
-  ❌ NEVER delete anything below the :root block
-  ❌ NEVER rewrite the entire file — always read it first, change ONLY :root { }
-  ❌ NEVER add body{} or @keyframes — they already exist below :root
-  ❌ NEVER write "/* rest of the file remains unchanged */" or "..." — write the FULL file or only :root
-  ❌ NEVER use \n escape sequences — use real newlines
-  The file is 100+ lines. If you see it's shorter, restore it — do NOT overwrite.
+STEP 2 — Read globals.css then write back replacing ONLY :root { }:
+  Variable names: --color-primary  --color-secondary  --color-bg  --color-text  --font-display
+  ❌ NEVER delete anything below :root · NEVER add body{} or @keyframes · write the FULL file
+  ❌ NEVER write "/* rest of file unchanged */" — include every line
 
-STEP 3 — launch_frontend("http://localhost:3000")
-  That is the FINAL step. Do NOT call qa_site, do NOT read files after launching.
-  The site is scaffold-protected — all component files are correct. Just launch and stop.
+STEP 3 — launch_frontend("http://localhost:3000") — final step, nothing after
 
-== CODE EDIT ("fix/add/refactor") ==
-When the user references a file path outside the generated-site directory:
-1. Load the target file at the EXACT path provided by the user using the available read tool.
-2. Apply the requested change — minimal edit, do not rewrite unrelated code.
-3. Write the updated content to the EXACT same path using the available write tool.
-4. Always use ABSOLUTE paths as given by the user. Do NOT rewrite paths to generated-site.
-CRITICAL JSON RULE: When providing the "content" argument to the write tool, you MUST properly escape all newlines as \n and quotes as \". Do NOT use raw line breaks inside the JSON string.
-This mode works for ANY language (Python, JavaScript, TypeScript, etc.) — not just Next.js.
-== CANVAS / PREVIEW == launch_frontend(:3000)
-== SPATIAL EDITOR == launch_frontend(:3001)
+== CODE EDIT ("fix/add/refactor/change") ==
+1. Read the target file at the exact path
+2. Apply minimal change — do not rewrite unrelated code
+3. Write back to the same path
+NEVER use next/image — always plain <img src="...">
+NEVER import from paths other than lucide-react, next/link, or react
 
-ABSOLUTE RULES — violating any of these breaks the build:
-- NEVER write to any component .tsx file — they are locked
-- NEVER import fetch_images anywhere — it is an agent tool, not a module
-- NEVER use next/image — always plain <img src="...">
-- NEVER import from lib/animations or any path that is not lucide-react, framer-motion, or next/link
-- Image values in site-content.ts must be plain URL strings — never function calls
-DO NOT call qa_site, fetch_images, or shell_exec during website theming — they are not part of the workflow.
-
-${AGENT_MEMORY ? "== MEMORY: KNOWN ERRORS (mandatory — violations cause build failures) ==\n" + AGENT_MEMORY : ""}`;
+${AGENT_MEMORY ? "== MEMORY: KNOWN ERRORS ==\n" + AGENT_MEMORY : ""}`;
 // ── Lazy HTTP API server on :3002 (started only when frontend work begins) ─────
 
 let _apiServer = null;
@@ -1154,18 +1354,38 @@ function startApiServerIfNeeded() {
         res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
 
         try {
-          // Classify the voice/overlay command and pick minimal tool set
           const voiceIntent = classifyIntent(prompt);
+
+          // ── Website build: use the full Research→UIUX→SNR-DEV pipeline ──────
+          if (voiceIntent === "website") {
+            res.write("[ORCHESTRATOR] Building website via Research→UIUX pipeline…\n");
+            await buildWebsiteDirect(prompt);
+            res.end("\n[done]");
+            return;
+          }
+
+          // ── Visual editor: launch directly ────────────────────────────────
+          if (voiceIntent === "visual") {
+            const lt = TOOLS.find(t => t.name === "launch_frontend");
+            if (lt) await lt.handler({ url: "http://localhost:3001" });
+            res.end("[CANVAS] Spatial editor launched\n[done]");
+            return;
+          }
+
+          // ── All other intents (fix / feature / arch / chat): tool-calling ──
           const voiceToolMap = Object.fromEntries(TOOLS.map(t => [t.name, t]));
           const voicePick = (...names) => names.map(n => voiceToolMap[n]).filter(Boolean);
           const voiceTools = {
-            website: voicePick("file_read", "file_write", "fetch_images", "launch_frontend", "append_memory"),
             fix:     voicePick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
             feature: voicePick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
             arch:    voicePick("file_read", "file_write", "search", "shell_exec", "qa_site", "launch_frontend", "append_memory"),
-            visual:  voicePick("launch_frontend", "append_memory"),
             chat:    [],
           }[voiceIntent] ?? voicePick("file_read", "file_write", "search", "append_memory");
+
+          // Inject active pool key so gitclaw's query() picks it up
+          const _activeKey = await getKey();
+          process.env.GROQ_API_KEY = _activeKey.key;
+          logEvent("KEYPOOL", `query() using ${_activeKey.label}`, "🔑", C.dim);
 
           for await (const msg of query({
             prompt,
@@ -1179,11 +1399,141 @@ function startApiServerIfNeeded() {
             if (msg.type === "delta") res.write(msg.content);
             else if (msg.type === "assistant") res.write("\n");
           }
+          _activeKey.uses++;
           res.end("\n[done]");
         } catch (e) {
           res.end(`\n[error] ${e.message}`);
         }
       });
+      return;
+    }
+
+    // ── GET /key-status — key pool health (which orgs are ready / cooling) ────
+    if (req.method === "GET" && req.url === "/key-status") {
+      const status = keyPoolStatus();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ keys: status, totalKeys: KEY_POOL.length }, null, 2));
+      // Also print to stderr for terminal visibility
+      process.stderr.write(`[keypool] status:\n${status.map(k => `  ${k.label}: ${k.status} | uses:${k.uses} err:${k.errors}`).join('\n')}\n`);
+      return;
+    }
+
+    // ── GET /variants — return generated design variants as JSON ─────────────
+    if (req.method === "GET" && req.url === "/variants") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      try {
+        const vp = path.join(GENERATED_SITE, "src", "app", "design-variants.json");
+        res.end(existsSync(vp) ? readFileSync(vp, "utf-8") : "[]");
+      } catch { res.end("[]"); }
+      return;
+    }
+
+    // ── POST /apply-variant — patch globals.css with component-scoped vars ───
+    if (req.method === "POST" && req.url === "/apply-variant") {
+      let body = "";
+      req.on("data", d => { body += d; });
+      req.on("end", () => {
+        try {
+          const { id, component } = JSON.parse(body);
+          const vp = path.join(GENERATED_SITE, "src", "app", "design-variants.json");
+          if (!existsSync(vp)) throw new Error("No variants file — build a site first");
+          const variants = JSON.parse(readFileSync(vp, "utf-8"));
+          const variant = variants.find(v => v.id === id);
+          if (!variant) throw new Error(`Variant id=${id} not found`);
+
+          // Map component name → CSS selector
+          const SEL = {
+            navbar:   "nav",
+            hero:     "section:first-of-type",
+            cards:    "section:nth-of-type(2)",
+            features: "section:nth-of-type(3)",
+            cta:      "section:nth-of-type(4)",
+            footer:   "footer",
+            header:   "header",
+          };
+          const selector = SEL[component] ?? component;
+
+          // Build override block
+          const block =
+            `\n/* [COMPONENT-OVERRIDE: ${component}] */\n` +
+            `${selector} {\n` +
+            `  --color-primary:   ${variant.palette.primary};\n` +
+            `  --color-secondary: ${variant.palette.secondary};\n` +
+            `  --color-bg:        ${variant.palette.bg};\n` +
+            `  --color-text:      ${variant.palette.text};\n` +
+            `}\n`;
+
+          // Remove any existing override for this component, then append new one
+          const cssPath = path.join(GENERATED_SITE, "src", "app", "globals.css");
+          let css = readFileSync(cssPath, "utf-8");
+          const existing = new RegExp(
+            `\\n\\/\\* \\[COMPONENT-OVERRIDE: ${component}\\] \\*\\/[\\s\\S]*?\\}\\n`, "g"
+          );
+          css = css.replace(existing, "").trimEnd() + "\n" + block;
+          writeFileSync(cssPath, css, "utf-8");
+
+          logEvent("SNR-DEV", `Applied variant "${variant.name}" → ${selector}`, "", C.cyan);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, variant: variant.name, component, selector }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+      });
+      return;
+    }
+
+    // ── POST /apply-design-variant — switch layout variant for a component ────
+    if (req.method === "POST" && req.url === "/apply-design-variant") {
+      let body = "";
+      req.on("data", d => { body += d; });
+      req.on("end", () => {
+        try {
+          const { component, variantIndex } = JSON.parse(body);
+          const validComponents = ["navbar","hero","cards","features","cta","footer"];
+          if (!validComponents.includes(component)) throw new Error(`Unknown component: ${component}`);
+          const idx = Number(variantIndex);
+          if (isNaN(idx) || idx < 0 || idx > 4) throw new Error(`variantIndex must be 0-4, got ${variantIndex}`);
+
+          const siteContentPath = path.join(GENERATED_SITE, "src", "app", "site-content.ts");
+          let src = readFileSync(siteContentPath, "utf-8");
+
+          // Update the specific variant number in the variants block
+          // Matches:  navbar:   0,  or  navbar:   3,  etc.
+          const re = new RegExp(`(\\b${component}:\\s*)\\d+(,)`);
+          if (!re.test(src)) throw new Error(`Could not find variants.${component} in site-content.ts`);
+          src = src.replace(re, `$1${idx}$2`);
+          writeFileSync(siteContentPath, src, "utf-8");
+
+          logEvent("SNR-DEV", `Layout variant → ${component}=${idx}`, "", C.cyan);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, component, variantIndex: idx }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+      });
+      return;
+    }
+
+    // ── GET /site-variants — read current variant indices from site-content.ts ─
+    if (req.method === "GET" && req.url === "/site-variants") {
+      try {
+        const siteContentPath = path.join(GENERATED_SITE, "src", "app", "site-content.ts");
+        const src = readFileSync(siteContentPath, "utf-8");
+        const match = src.match(/variants\s*:\s*\{([^}]+)\}/s);
+        if (!match) { res.writeHead(200, { "Content-Type": "application/json" }); res.end("{}"); return; }
+        const vars = {};
+        for (const line of match[1].split("\n")) {
+          const m = line.match(/(\w+)\s*:\s*(\d+)/);
+          if (m) vars[m[1]] = Number(m[2]);
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(vars));
+      } catch {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end("{}");
+      }
       return;
     }
 
@@ -1203,17 +1553,23 @@ function startApiServerIfNeeded() {
 }
 
 // ── Agent runner ───────────────────────────────────────────────────────────────
-// Role → display config
+// Role → display config  (covers all 18 agents + system roles)
 const ROLE_CONFIG = {
-  ORCHESTRATOR: { emoji: "🤖", color: C.white },
-  ARCHITECT: { emoji: "🏗️", color: C.yellow },
-  "SNR-DEV": { emoji: "📦", color: C.cyan },
-  "JNR-DEV": { emoji: "🔧", color: C.blue },
-  QA: { emoji: "🔍", color: C.magenta },
-  CANVAS: { emoji: "✏️", color: C.magenta },
-  PREVIEW: { emoji: "🌐", color: C.green },
-  MEMORY: { emoji: "💾", color: C.yellow },
-  GUARDRAILS: { emoji: "🛡️", color: C.red },
+  ORCHESTRATOR:   { emoji: "🤖", color: C.white },
+  "CODE-EDITOR":  { emoji: "📋", color: C.yellow },
+  ARCHITECT:      { emoji: "🏗️", color: C.yellow },
+  "SNR-DEV":      { emoji: "📦", color: C.cyan },
+  "JNR-DEV":      { emoji: "🔧", color: C.blue },
+  UIUX:           { emoji: "🎨", color: C.magenta },
+  QA:             { emoji: "🔍", color: C.magenta },
+  CANVAS:         { emoji: "✏️", color: C.magenta },
+  PREVIEW:        { emoji: "🌐", color: C.green },
+  MEMORY:         { emoji: "💾", color: C.yellow },
+  GUARDRAILS:     { emoji: "🛡️", color: C.red },
+  RESEARCH:       { emoji: "🔭", color: C.cyan },
+  RESOURCER:      { emoji: "🖼️", color: C.cyan },
+  "IMAGE-GEN":    { emoji: "🎨", color: C.magenta },
+  EDITOR:         { emoji: "✏️", color: C.magenta },
 };
 
 function emitRoleBanner(role) {
@@ -1223,15 +1579,20 @@ function emitRoleBanner(role) {
 
 function getPhaseDescription(role) {
   const map = {
-    ORCHESTRATOR: "Routing intent…",
-    ARCHITECT: "Architect analyzing — planning build…",
-    "SNR-DEV": "Senior Developer splitting work across files…",
-    "JNR-DEV": "Junior Developer applying targeted edit…",
-    QA: "Site-tester running validation…",
-    CANVAS: "Opening visual / spatial editor…",
-    PREVIEW: "Launching preview server…",
-    MEMORY: "Writing to agent memory…",
-    GUARDRAILS: "Guardrails checking operation…",
+    ORCHESTRATOR:  "Routing intent…",
+    "CODE-EDITOR": "Assessing tier — dispatching to sub-agent…",
+    ARCHITECT:     "Architect analyzing — planning build…",
+    "SNR-DEV":     "Senior Developer splitting work across files…",
+    "JNR-DEV":     "Junior Developer applying targeted edit…",
+    UIUX:          "UI/UX Designer applying visual changes…",
+    QA:            "Site-tester running validation…",
+    CANVAS:        "Opening visual / spatial editor…",
+    PREVIEW:       "Launching preview server…",
+    MEMORY:        "Writing to agent memory…",
+    GUARDRAILS:    "Guardrails checking operation…",
+    RESEARCH:      "Research agent searching…",
+    RESOURCER:     "Resourcer curating visual assets…",
+    "IMAGE-GEN":   "Image-gen crafting Puter.js prompts & injecting loader…",
   };
   return map[role] ?? "Working…";
 }
@@ -1246,120 +1607,592 @@ function detectRoleFromToolName(toolName) {
   return null;
 }
 
-// ── Direct Groq website builder — bypasses tool-calling entirely ──────────────
-// llama-3.3-70b-versatile fails with "failed_generation" when it has to pick
-// tools from a schema. For website creation we don't need tools — we just ask
-// the model to output file content directly, then write it ourselves.
-async function buildWebsiteDirect(prompt) {
-  const GROQ_KEY = process.env.GROQ_API_KEY;
-  if (!GROQ_KEY) throw new Error("GROQ_API_KEY not set");
+// ── Shared Groq chat helper — uses key pool with automatic 429 rotation ────────
+async function callGroq(systemPrompt, userMessage, maxTokens = 1200, temperature = 0.7) {
+  const GROQ_MODEL = "llama-3.3-70b-versatile";
+  let lastErr;
 
+  // Try every key in the pool (round-robin + fallback on 429)
+  for (let attempt = 0; attempt < KEY_POOL.length * 2; attempt++) {
+    const entry = await getKey();
+    logEvent("KEYPOOL", `Using ${entry.label} (uses:${entry.uses})`, "🔑", C.dim);
+
+    let r;
+    try {
+      r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${entry.key}` },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          max_tokens: Math.min(maxTokens, 4096),
+          temperature,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user",   content: userMessage   },
+          ],
+        }),
+      });
+    } catch (netErr) {
+      lastErr = netErr;
+      logEvent("KEYPOOL", `${entry.label} network error: ${netErr.message}`, "⚠️", C.red);
+      continue;
+    }
+
+    if (r.status === 429) {
+      coolKey(entry, r.headers);
+      lastErr = new Error(`${entry.label} rate-limited`);
+      continue; // rotate to next key
+    }
+
+    const j = await r.json();
+    if (!r.ok) {
+      lastErr = new Error(`Groq ${r.status}: ${JSON.stringify(j).slice(0, 200)}`);
+      logEvent("KEYPOOL", `${entry.label} error ${r.status} — skipping`, "⚠️", C.red);
+      entry.errors++;
+      continue;
+    }
+
+    entry.uses++;
+    let text = j.choices?.[0]?.message?.content?.trim() ?? "";
+    text = text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+    return text;
+  }
+
+  throw lastErr ?? new Error("All Groq keys exhausted");
+}
+
+// ── RESEARCH AGENT — discovers what this type of website needs ─────────────────
+// Returns JSON: { siteType, aesthetic, keyFeatures[], targetAudience,
+//                 designInspiration, variants:{navbar,hero,cards,features,cta,footer},
+//                 colorPalette:{primary,secondary,bg,text}, fontDisplay, imageKeywords[] }
+async function runResearchAgent(userPrompt) {
+  logHandoff("ORCHESTRATOR", "RESEARCH", "discovering design DNA for request");
+  emitRoleBanner("RESEARCH");
+  const SYSTEM = `You are a senior web design researcher. Given a website request, return ONLY valid JSON (no markdown) with this exact shape:
+{
+  "siteType": "e-commerce|portfolio|landing|saas|blog|agency|restaurant|...",
+  "aesthetic": "one sentence describing the visual mood and style",
+  "keyFeatures": ["feature 1", "feature 2", "feature 3"],
+  "targetAudience": "who will use this site",
+  "designInspiration": "3 real brands/sites that do this well",
+  "imageKeywords": ["keyword1", "keyword2", "keyword3"],
+  "variants": {
+    "navbar": 0,
+    "hero": 0,
+    "cards": 0,
+    "features": 0,
+    "cta": 0,
+    "footer": 0
+  },
+  "colorPalette": { "primary": "#hex", "secondary": "#hex", "bg": "#hex", "text": "#hex" },
+  "fontDisplay": "'FontName', fallback-family"
+}
+
+VARIANT INDEX GUIDE — pick the best fit for the site type:
+navbar:   0=Classic(logo-left)  1=Centered(logo-middle)  2=Animated(typewriter)  3=GlassCTA(with button)  4=Minimal(hamburger drawer)
+hero:     0=Cinematic(fullbleed) 1=Split(text+image side) 2=BoldType(huge text)  3=Magazine(editorial)     4=Asymmetric(dramatic)
+cards:    0=Grid(3col)   1=Carousel(horizontal)  2=Featured(1big+smalls)  3=Masonry(staggered)  4=List(alternating rows)
+features: 0=IconGrid  1=Numbered  2=Alternating(left/right)  3=Timeline  4=StatCards(horizontal scroll)
+cta:      0=Fullbleed(image bg)  1=Split(text+image)  2=Minimal(border accent)  3=GlassCard(frosted)  4=HorizBar(banner strip)
+footer:   0=TwoCol  1=Centered  2=Minimal(one line)  3=BigBrand(watermark text)  4=DarkCard(raised card)
+
+Choose variants that match the industry and vibe. E.g. e-commerce → navbar:3(CTA button), hero:1(product split), cards:0(product grid)`;
+
+  const text = await callGroq(SYSTEM, `Website request: ${userPrompt}`, 1000, 0.6);
+  try {
+    const research = JSON.parse(text);
+    logEvent("RESEARCH", `Site type: ${research.siteType} | Variants: navbar=${research.variants?.navbar} hero=${research.variants?.hero} cards=${research.variants?.cards}`, "", C.cyan);
+    return research;
+  } catch {
+    logEvent("RESEARCH", "JSON parse failed — using defaults", "", C.red);
+    return { siteType: "landing", variants: { navbar: 0, hero: 0, cards: 0, features: 0, cta: 0, footer: 0 }, colorPalette: {}, fontDisplay: "'Inter', sans-serif", imageKeywords: [] };
+  }
+}
+
+// ── RESOURCER AGENT — curates specific images + enriches design brief ──────────
+// Returns JSON: { imageTheme, heroSeed, cardSeeds[], ctaSeed, palette, fontDisplay }
+async function runResourcerAgent(research, userPrompt) {
+  logHandoff("RESEARCH", "RESOURCER", "curating visual assets and image prompts");
+  emitRoleBanner("RESOURCER");
+  const aesthetic = research.aesthetic ?? "";
+  const keywords  = (research.imageKeywords ?? []).join(", ");
+  const SYSTEM = `You are a visual art director. Given site research, output ONLY valid JSON:
+{
+  "imageTheme": "3-5 keyword Pollinations prompt base (e.g. 'luxury spa cinematic warm gold')",
+  "heroSeed": 12345,
+  "cardSeeds": [11111, 22222, 33333],
+  "ctaSeed": 44444,
+  "fontDisplay": "'FontName', fallback"
+}
+Seeds must be random 5-digit numbers. Image theme must be evocative and visual.`;
+  const text = await callGroq(SYSTEM, `Site: ${userPrompt}\nAesthetic: ${aesthetic}\nKeywords: ${keywords}`, 400, 0.8);
+  try {
+    const res = JSON.parse(text);
+    logEvent("RESOURCER", `Image theme: "${res.imageTheme}" | Seeds: ${res.heroSeed}, ${res.cardSeeds?.join(",")}`, "", C.cyan);
+    return res;
+  } catch {
+    return { imageTheme: userPrompt.toLowerCase().replace(/\s+/g, "+"), heroSeed: 73421, cardSeeds: [11111,22222,33333], ctaSeed: 55555, fontDisplay: "'Inter', sans-serif" };
+  }
+}
+
+// ── UIUX AGENT — decides final design: sectionTitle copy, CTA text, feature labels ──
+async function runUIUXAgent(research, resources, userPrompt) {
+  logHandoff("RESOURCER", "UIUX", "designing content + copy for each section");
+  emitRoleBanner("UIUX");
+  const theme = resources.imageTheme ?? userPrompt;
+  const SYSTEM = `You are a senior UI/UX designer and copywriter. Output ONLY valid JSON:
+{
+  "brand": "site name",
+  "tagline": "short tagline for footer",
+  "navLinks": [{"label":"Home","href":"/"},{"label":"...","href":"/..."}],
+  "heroHeadline": "punchy hero headline (max 8 words)",
+  "heroSubtext": "compelling subtext 1-2 sentences",
+  "heroCTA1": "primary button text",
+  "heroCTA2": "secondary button text",
+  "cards": [
+    {"title":"...","desc":"one sentence"},
+    {"title":"...","desc":"one sentence"},
+    {"title":"...","desc":"one sentence"}
+  ],
+  "featureSectionTitle": "...",
+  "features": [
+    {"icon":"emoji","title":"...","desc":"one sentence"},
+    {"icon":"emoji","title":"...","desc":"one sentence"},
+    {"icon":"emoji","title":"...","desc":"one sentence"},
+    {"icon":"emoji","title":"...","desc":"one sentence"}
+  ],
+  "ctaHeadline": "strong CTA headline",
+  "ctaBody": "supporting CTA text",
+  "ctaButton": "CTA button text",
+  "footerLinks": [{"label":"About","href":"/about"},{"label":"Contact","href":"/contact"},{"label":"FAQ","href":"/faq"}]
+}
+All copy must be themed to the user's request. Be specific, not generic.`;
+  const text = await callGroq(SYSTEM, `Design brief:\n- Site: ${userPrompt}\n- Style: ${research.aesthetic}\n- Audience: ${research.targetAudience}\n- Inspiration: ${research.designInspiration}`, 1400, 0.75);
+  try {
+    const ux = JSON.parse(text);
+    logEvent("UIUX", `Brand: "${ux.brand}" | Headline: "${ux.heroHeadline}"`, "", C.magenta);
+    return ux;
+  } catch {
+    logEvent("UIUX", "JSON parse failed — falling back to basic copy", "", C.red);
+    return null;
+  }
+}
+
+// ── IMAGE-GEN AGENT — crafts Puter.js txt2img prompts based on architect brief ──
+// Writes puter-image-config.js to public/, and creates PuterImageLoader.tsx.
+// Returns { heroPrompt, cardPrompts[], ctaPrompt }
+async function runImageGenAgent(research, resources, ux, userPrompt) {
+  logHandoff("UIUX", "IMAGE-GEN", "crafting Puter.js AI image prompts from architect brief");
+  emitRoleBanner("IMAGE-GEN");
+
+  const aesthetic  = research.aesthetic  ?? "cinematic, dramatic";
+  const siteType   = research.siteType   ?? "website";
+  const theme      = resources.imageTheme ?? userPrompt;
+  const brand      = ux?.brand ?? userPrompt;
+  const headline   = ux?.heroHeadline ?? "";
+  const cards      = ux?.cards ?? [];
+
+  const SYSTEM = `You are an AI image prompt engineer. Given a website design brief, output ONLY this exact JSON structure. No markdown, no extra text:
+{"heroPrompt":"PROMPT_HERE","cardPrompts":["CARD1","CARD2","CARD3"],"ctaPrompt":"CTA_HERE"}
+Rules for prompt values:
+- Keep each prompt under 100 characters
+- No quotes, apostrophes, backslashes, or special chars inside prompts (they break JSON)
+- Use only ASCII letters, numbers, commas, spaces, and hyphens in prompt text
+- Include: art style, mood, lighting, color keywords
+- Never name real people or copyrighted characters`;
+
+  const brief = `Brand: ${brand} | Type: ${siteType} | Aesthetic: ${aesthetic} | Theme: ${theme} | Cards: ${cards.map(c => c.title).join(', ')}`;
+
+  let prompts;
+  try {
+    const raw = await callGroq(SYSTEM, brief, 600, 0.65);
+    // Robust extraction: try JSON.parse first, then regex fallback
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // Try to extract values even from malformed JSON using regex
+      const heroM  = raw.match(/"heroPrompt"\s*:\s*"([^"]{5,200})"/);
+      const ctaM   = raw.match(/"ctaPrompt"\s*:\s*"([^"]{5,200})"/);
+      const cardsM = [...raw.matchAll(/"([^"]{5,150})"/g)]
+        .map(m => m[1])
+        .filter(s => s !== 'heroPrompt' && s !== 'ctaPrompt' && s !== 'cardPrompts' && s.length > 10)
+        .slice(0, 3);
+      if (heroM) {
+        parsed = { heroPrompt: heroM[1], cardPrompts: cardsM, ctaPrompt: ctaM?.[1] ?? cardsM[0] ?? '' };
+      } else {
+        throw new Error('regex extraction also failed');
+      }
+    }
+    prompts = parsed;
+    logEvent("IMAGE-GEN", `Hero: "${String(prompts.heroPrompt).slice(0, 70)}…"`, "", C.magenta);
+    logEvent("IMAGE-GEN", `Cards: ${(prompts.cardPrompts ?? []).length} prompts generated`, "", C.magenta);
+    logEvent("IMAGE-GEN", `CTA:   "${String(prompts.ctaPrompt).slice(0, 70)}…"`, "", C.magenta);
+  } catch (e) {
+    logEvent("IMAGE-GEN", `Prompt generation failed (${e.message}) — using theme fallback`, "", C.red);
+    const base = theme.replace(/[^a-zA-Z0-9 ,\-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+    prompts = {
+      heroPrompt:   `${base} - cinematic hero wide shot - dramatic lighting - ultra detailed`,
+      cardPrompts:  [`${base} - scene one - photorealistic`, `${base} - scene two - cinematic`, `${base} - scene three - artistic`],
+      ctaPrompt:    `${base} - wide panoramic banner - dramatic sky - cinematic color grade`,
+    };
+  }
+
+  return {
+    heroPrompt:  prompts.heroPrompt  ?? "",
+    cardPrompts: prompts.cardPrompts ?? [],
+    ctaPrompt:   prompts.ctaPrompt   ?? "",
+  };
+}
+
+// ── Website builder: RESEARCH → RESOURCER → UIUX → IMAGE-GEN → SNR-DEV → PREVIEW ─────
+async function buildWebsiteDirect(prompt) {
+  if (!KEY_POOL.length) throw new Error("No Groq API keys configured");
   const startMs = Date.now();
+
+  // ── Pre-build reset: wipe component residue from previous agent edits ─────
+  // Restore all component files to the clean baseline captured at server startup.
+  // This prevents styles/content from a prior website leaking into the new build.
+  let restoredCount = 0;
+  for (const [fname, content] of Object.entries(COMPONENT_SNAPSHOTS)) {
+    const fp = path.join(_COMP_DIR, fname);
+    writeFileSync(fp, content, "utf-8");
+    restoredCount++;
+  }
+  if (restoredCount > 0)
+    process.stderr.write(`[prebuild] Restored ${restoredCount} component baselines — clean slate\n`);
+
+  logHandoff("ORCHESTRATOR", "ARCHITECT", "beginning site build pipeline");
   emitRoleBanner("ARCHITECT");
-  logEvent("ARCHITECT", "Generating website content…", "🏗️", C.yellow);
+  logEvent("ARCHITECT", `Planning: "${prompt.slice(0, 60)}"`, "", C.yellow);
 
   const siteContentPath = path.join(GENERATED_SITE, "src", "app", "site-content.ts");
   const cssPath         = path.join(GENERATED_SITE, "src", "app", "globals.css");
+  const variantsPath    = path.join(GENERATED_SITE, "src", "app", "design-variants.json");
+  const variantsTsPath  = path.join(GENERATED_SITE, "src", "app", "design-variants.ts");
 
-  // ── Step 1: generate site-content.ts ──────────────────────────────────────
-  const contentReq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 3000,
-      temperature: 0.7,
-      messages: [
-        {
-          role: "system",
-          content: `You output ONLY valid TypeScript — no markdown, no explanation, no code fences.
-Output exactly this structure for the given theme:
-export const SITE = {
-  navbar: { brand: "...", links: [{label:"...",href:"/..."},...] },
-  hero: { headline:"...", subtext:"...", cta1:"...", cta2:"...", imageUrl:"https://image.pollinations.ai/prompt/THEME+cinematic?width=1600&height=900&nologo=true&seed=NNNNN" },
-  cards: [{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+card?width=400&height=300&nologo=true&seed=NNNNN"},{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+card2?width=400&height=300&nologo=true&seed=NNNNN"},{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+card3?width=400&height=300&nologo=true&seed=NNNNN"}],
-  features: { sectionTitle:"...", items:[{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."}] },
-  cta: { headline:"...", body:"...", button:"...", imageUrl:"https://image.pollinations.ai/prompt/THEME+wide?width=1200&height=400&nologo=true&seed=NNNNN" },
-  footer: { brand:"...", tagline:"...", links:[{label:"...",href:"/..."},...] },
+  // ── Stage 1: RESEARCH ─────────────────────────────────────────────────────
+  const research = await runResearchAgent(prompt);
+  const v = research.variants ?? { navbar:0, hero:0, cards:0, features:0, cta:0, footer:0 };
+
+  // ── Stage 2: RESOURCER ────────────────────────────────────────────────────
+  const resources = await runResourcerAgent(research, prompt);
+  const imgTheme  = (resources.imageTheme ?? prompt.toLowerCase()).replace(/\s+/g, "+");
+  const heroSeed  = resources.heroSeed  ?? 73421;
+  const [cs1,cs2,cs3] = resources.cardSeeds ?? [11111,22222,33333];
+  const ctaSeed   = resources.ctaSeed   ?? 55555;
+
+  // ── Stage 3: UIUX ─────────────────────────────────────────────────────────
+  const ux = await runUIUXAgent(research, resources, prompt);
+
+  // ── Stage 3.5: IMAGE-GEN — Puter.js prompt engineering ───────────────────
+  const imageGenResult = await runImageGenAgent(research, resources, ux, prompt);
+  const { heroPrompt, cardPrompts, ctaPrompt } = imageGenResult;
+
+  // Write puter-image-config.js to generated-site/public/ so the browser can load it
+  const publicDir = path.join(GENERATED_SITE, "public");
+  mkdirSync(publicDir, { recursive: true });
+  const puterConfigPath = path.join(publicDir, "puter-image-config.js");
+  const puterConfigContent = `// Auto-generated by IMAGE-GEN agent — do not edit\nwindow.__puterImageConfig = ${JSON.stringify({
+    hero:  heroPrompt,
+    cards: cardPrompts,
+    cta:   ctaPrompt,
+  }, null, 2)};\n`;
+  writeFileSync(puterConfigPath, puterConfigContent, "utf-8");
+  logEvent("IMAGE-GEN", `puter-image-config.js → public/ (${(puterConfigContent.length / 1024).toFixed(1)}KB)`, "", C.magenta);
+
+  // Write PuterImageLoader.tsx to the components directory
+  const puterLoaderPath = path.join(GENERATED_SITE, "src", "components", "PuterImageLoader.tsx");
+  const puterLoaderContent = `'use client';
+import { useEffect, useState } from 'react';
+
+type PuterConfig = {
+  hero:  string;
+  cards: string[];
+  cta:   string;
 };
-Rules: all text themed to the request · no imports · no JSX · plain strings only · real seed numbers`
-        },
-        { role: "user", content: `Create site content for: ${prompt}` }
-      ],
-    }),
-  });
-  const contentJson = await contentReq.json();
-  if (!contentReq.ok) throw new Error(`Groq error: ${JSON.stringify(contentJson)}`);
-  let siteContent = contentJson.choices?.[0]?.message?.content?.trim() ?? "";
-  // Strip markdown code fences if model added them anyway
-  siteContent = siteContent.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+
+const LOG_LIMIT = 20;
+
+export default function PuterImageLoader() {
+  const [logs, setLogs]       = useState<string[]>(['[IMAGE-GEN] 🎨 Initialising Puter.js…']);
+  const [done, setDone]       = useState(false);
+  const [visible, setVisible] = useState(true);
+
+  const addLog = (msg: string) =>
+    setLogs(prev => [...prev.slice(-(LOG_LIMIT - 1)), msg]);
+
+  useEffect(() => {
+    // Load puter-image-config.js from public/ then puter.js SDK
+    const cfgScript = document.createElement('script');
+    cfgScript.src = '/puter-image-config.js';
+    cfgScript.onload = () => loadPuterSDK();
+    cfgScript.onerror = () => addLog('[IMAGE-GEN] ❌ Config load failed — check public/puter-image-config.js');
+    document.head.appendChild(cfgScript);
+
+    return () => { document.head.removeChild(cfgScript); };
+  }, []);
+
+  function loadPuterSDK() {
+    if ((window as any).puter) { runGeneration(); return; }
+    addLog('[IMAGE-GEN] 📦 Loading Puter.js SDK…');
+    const s = document.createElement('script');
+    s.src = 'https://js.puter.com/v2/';
+    s.onload  = () => { addLog('[IMAGE-GEN] ✅ Puter.js ready'); runGeneration(); };
+    s.onerror = () => addLog('[IMAGE-GEN] ❌ Puter.js SDK failed to load — are you online?');
+    document.head.appendChild(s);
+  }
+
+  async function runGeneration() {
+    const puter = (window as any).puter;
+    const cfg   = (window as any).__puterImageConfig as PuterConfig | undefined;
+    if (!puter?.ai?.txt2img || !cfg) {
+      addLog('[IMAGE-GEN] ❌ Puter AI or config not available');
+      return;
+    }
+
+    // ── Hero image ──────────────────────────────────────────────────────────
+    const heroEl = document.querySelector<HTMLImageElement>('img[data-puter-zone="hero"]');
+    if (heroEl && cfg.hero) {
+      addLog('[IMAGE-GEN] 🎨 Generating hero image (may take 5–15s)…');
+      const t0 = Date.now();
+      try {
+        const img = await puter.ai.txt2img(cfg.hero);
+        heroEl.src = img.src;
+        addLog(\`[IMAGE-GEN] ✅ Hero ready (\${((Date.now()-t0)/1000).toFixed(1)}s)\`);
+      } catch (e: any) {
+        addLog(\`[IMAGE-GEN] ⚠️ Hero failed: \${e?.message ?? e}\`);
+      }
+    }
+
+    // ── Card images ─────────────────────────────────────────────────────────
+    const cardEls = document.querySelectorAll<HTMLImageElement>('img[data-puter-zone^="card"]');
+    if (cardEls.length > 0 && cfg.cards?.length) {
+      addLog(\`[IMAGE-GEN] 🎨 Generating \${cardEls.length} card images…\`);
+      await Promise.all(Array.from(cardEls).map(async (el, i) => {
+        const cardPrompt = cfg.cards[i] ?? cfg.cards[0];
+        if (!cardPrompt) return;
+        const t0 = Date.now();
+        try {
+          const img = await puter.ai.txt2img(cardPrompt);
+          el.src = img.src;
+          addLog(\`[IMAGE-GEN] ✅ Card \${i + 1} ready (\${((Date.now()-t0)/1000).toFixed(1)}s)\`);
+        } catch (e: any) {
+          addLog(\`[IMAGE-GEN] ⚠️ Card \${i + 1} failed: \${e?.message ?? e}\`);
+        }
+      }));
+    }
+
+    // ── CTA image ───────────────────────────────────────────────────────────
+    const ctaEl = document.querySelector<HTMLImageElement>('img[data-puter-zone="cta"]');
+    if (ctaEl && cfg.cta) {
+      addLog('[IMAGE-GEN] 🎨 Generating CTA banner…');
+      const t0 = Date.now();
+      try {
+        const img = await puter.ai.txt2img(cfg.cta);
+        ctaEl.src = img.src;
+        addLog(\`[IMAGE-GEN] ✅ CTA ready (\${((Date.now()-t0)/1000).toFixed(1)}s)\`);
+      } catch (e: any) {
+        addLog(\`[IMAGE-GEN] ⚠️ CTA failed: \${e?.message ?? e}\`);
+      }
+    }
+
+    addLog('[IMAGE-GEN] 🏁 All Puter.js images complete');
+    setDone(true);
+    setTimeout(() => setVisible(false), 6000);
+  }
+
+  if (!visible) return null;
+
+  return (
+    <div
+      data-puter-log
+      style={{
+        position:        'fixed',
+        bottom:          '1.5rem',
+        left:            '1.5rem',
+        zIndex:          9997,
+        fontFamily:      'ui-monospace, monospace',
+        fontSize:        '0.68rem',
+        lineHeight:      1.55,
+        maxWidth:        '26rem',
+        maxHeight:       '14rem',
+        overflowY:       'auto',
+        background:      'rgba(3,3,14,0.92)',
+        border:          '1px solid rgba(167,139,250,0.35)',
+        borderRadius:    '0.6rem',
+        backdropFilter:  'blur(18px)',
+        padding:         '0.65rem 0.8rem',
+        color:           '#c4b5fd',
+        boxShadow:       '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(167,139,250,0.08)',
+        transition:      'opacity 0.4s ease',
+        opacity:         done ? 0.5 : 1,
+      }}
+    >
+      <div style={{ fontWeight: 700, color: '#a78bfa', marginBottom: '0.35rem', letterSpacing: '0.04em' }}>
+        🎨 IMAGE-GEN · Puter.js
+      </div>
+      {logs.map((l, i) => (
+        <div key={i} style={{ opacity: i === logs.length - 1 ? 1 : 0.65 }}>{l}</div>
+      ))}
+      {done && (
+        <button
+          onClick={() => setVisible(false)}
+          style={{ marginTop: '0.4rem', background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', fontSize: '0.65rem' }}
+        >
+          ✕ dismiss
+        </button>
+      )}
+    </div>
+  );
+}
+`;
+  writeFileSync(puterLoaderPath, puterLoaderContent, "utf-8");
+  logEvent("IMAGE-GEN", `PuterImageLoader.tsx → components/`, "", C.magenta);
+
+  // ── Stage 4: SNR-DEV assembles site-content.ts ───────────────────────────
+  logHandoff("UIUX", "SNR-DEV", "assembling site-content.ts from research");
+  emitRoleBanner("SNR-DEV");
+
+  // Build SITE object from UIUX output (or fall back to Groq-generated content)
+  let siteContent;
+  if (ux) {
+    const navLinks  = (ux.navLinks  ?? [{label:"Home",href:"/"},{label:"About",href:"/about"},{label:"Contact",href:"/contact"}])
+      .map(l => `{label:"${l.label}",href:"${l.href}"}`)
+      .join(", ");
+    const cards = (ux.cards ?? []).map((c,i) =>
+      `{title:"${c.title}",desc:"${c.desc}",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card${i>0?i+1:""}?width=400&height=300&nologo=true&seed=${[cs1,cs2,cs3][i]??Math.floor(Math.random()*90000)+10000}",pzCard:${i}}`
+    ).join(",\n    ");
+    const features = (ux.features ?? []).map(f =>
+      `{icon:"${f.icon}",title:"${f.title}",desc:"${f.desc}"}`
+    ).join(",\n      ");
+    const footerLinks = (ux.footerLinks ?? [{label:"About",href:"/about"},{label:"Contact",href:"/contact"}])
+      .map(l => `{label:"${l.label}",href:"${l.href}"}`)
+      .join(", ");
+
+    siteContent = `export const SITE = {
+  navbar: { brand: "${ux.brand ?? "My Site"}", links: [${navLinks}] },
+  hero: {
+    headline: "${ux.heroHeadline ?? "Welcome"}",
+    subtext: "${ux.heroSubtext ?? ""}",
+    cta1: "${ux.heroCTA1 ?? "Get Started"}",
+    cta2: "${ux.heroCTA2 ?? "Learn More"}",
+    imageUrl: "https://image.pollinations.ai/prompt/${imgTheme}+cinematic?width=1600&height=900&nologo=true&seed=${heroSeed}",
+  },
+  cards: [
+    ${cards}
+  ],
+  features: {
+    sectionTitle: "${ux.featureSectionTitle ?? "Features"}",
+    items: [
+      ${features}
+    ],
+  },
+  cta: {
+    headline: "${ux.ctaHeadline ?? "Get Started"}",
+    body: "${ux.ctaBody ?? ""}",
+    button: "${ux.ctaButton ?? "Start Now"}",
+    imageUrl: "https://image.pollinations.ai/prompt/${imgTheme}+wide+banner?width=1200&height=400&nologo=true&seed=${ctaSeed}",
+  },
+  footer: {
+    brand: "${ux.brand ?? "My Site"}",
+    tagline: "${ux.tagline ?? ""}",
+    links: [${footerLinks}],
+  },
+  // Layout variant indices — set by UIUX agent based on site type
+  // navbar: 0=Classic 1=Centered 2=Animated 3=GlassCTA 4=Minimal
+  // hero:   0=Cinematic 1=Split 2=BoldType 3=Magazine 4=Asymmetric
+  // cards:  0=Grid 1=Carousel 2=Featured 3=Masonry 4=List
+  // features: 0=IconGrid 1=Numbered 2=Alternating 3=Timeline 4=StatCards
+  // cta:    0=Fullbleed 1=Split 2=Minimal 3=GlassCard 4=HorizBar
+  // footer: 0=TwoCol 1=Centered 2=Minimal 3=BigBrand 4=DarkCard
+  variants: {
+    navbar:   ${v.navbar   ?? 0},
+    hero:     ${v.hero     ?? 0},
+    cards:    ${v.cards    ?? 0},
+    features: ${v.features ?? 0},
+    cta:      ${v.cta      ?? 0},
+    footer:   ${v.footer   ?? 0},
+  },
+};`;
+  } else {
+    // UIUX failed — fall back to a single Groq call for content
+    logEvent("SNR-DEV", "UIUX failed — generating content directly", "", C.red);
+    const fallbackText = await callGroq(
+      `Output ONLY valid TypeScript (no markdown). Generate: export const SITE = { navbar:{brand:"...",links:[{label:"...",href:"/..."}]}, hero:{headline:"...",subtext:"...",cta1:"...",cta2:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+cinematic?width=1600&height=900&nologo=true&seed=${heroSeed}"}, cards:[{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card?width=400&height=300&nologo=true&seed=${cs1}"},{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card2?width=400&height=300&nologo=true&seed=${cs2}"},{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card3?width=400&height=300&nologo=true&seed=${cs3}"}], features:{sectionTitle:"...",items:[{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."}]}, cta:{headline:"...",body:"...",button:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+wide?width=1200&height=400&nologo=true&seed=${ctaSeed}"}, footer:{brand:"...",tagline:"...",links:[{label:"About",href:"/about"},{label:"Contact",href:"/contact"}]}, variants:{navbar:${v.navbar??0},hero:${v.hero??0},cards:${v.cards??0},features:${v.features??0},cta:${v.cta??0},footer:${v.footer??0}}, };`,
+      `Theme: ${prompt}`,
+      2000, 0.7
+    );
+    siteContent = fallbackText;
+  }
 
   writeFileSync(siteContentPath, siteContent, "utf-8");
-  logEvent("SNR-DEV", "Wrote site-content.ts", "✍️", C.cyan);
+  logEvent("SNR-DEV", `site-content.ts written (variants: nb=${v.navbar} hero=${v.hero} cards=${v.cards} feat=${v.features} cta=${v.cta} ft=${v.footer})`, "", C.cyan);
 
-  // ── Step 2: generate CSS :root variables ──────────────────────────────────
-  const cssReq = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 200,
-      temperature: 0.3,
-      messages: [
-        {
-          role: "system",
-          content: `Output ONLY a CSS :root block — no explanation, no markdown. Use exactly these variable names:
-:root {
-  --color-primary: #hex;
-  --color-secondary: #hex;
-  --color-bg: #hex;
-  --color-text: #hex;
-  --font-display: 'FontName', fallback;
-}`
-        },
-        { role: "user", content: `CSS theme for: ${prompt}` }
-      ],
-    }),
-  });
-  const cssJson = await cssReq.json();
-  if (!cssReq.ok) throw new Error(`Groq CSS error: ${JSON.stringify(cssJson)}`);
-  let rootBlock = cssJson.choices?.[0]?.message?.content?.trim() ?? "";
-  rootBlock = rootBlock.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+  // ── Stage 4b: CSS :root from research palette ─────────────────────────────
+  logHandoff("SNR-DEV", "SNR-DEV", "writing globals.css :root");
+  const p = research.colorPalette ?? {};
+  const primary   = p.primary   ?? "#0d0d2b";
+  const secondary = p.secondary ?? "#a78bfa";
+  const bg        = p.bg        ?? "#030712";
+  const text      = p.text      ?? "#e2e8f0";
+  const font      = resources.fontDisplay ?? research.fontDisplay ?? "'Inter', sans-serif";
+  const rootBlock = `:root {\n  --color-primary: ${primary};\n  --color-secondary: ${secondary};\n  --color-bg: ${bg};\n  --color-text: ${text};\n  --font-display: ${font};\n}`;
 
-  // Ensure globals.css is healthy before patching :root
-  let existingCss = "";
-  try { existingCss = readFileSync(cssPath, "utf-8"); } catch {}
-  if (!existingCss.includes("@keyframes")) {
-    // CSS is broken/missing — restoreComponents will rebuild it
-    restoreComponents();
-    try { existingCss = readFileSync(cssPath, "utf-8"); } catch {}
-  }
-  // Replace only the :root block, keep everything else
-  const newCss = existingCss.includes(":root")
-    ? existingCss.replace(/:root\s*\{[^}]+\}/s, rootBlock)
-    : `@import "tailwindcss";\n\n${rootBlock}\n\n${existingCss}`;
+  // Full globals.css reset — replace :root in the canonical template.
+  // This eliminates CSS residue (component-specific rules, old color overrides)
+  // that accumulate when agents append to globals.css for feature requests.
+  const newCss = FULL_GLOBALS_CSS_TEMPLATE.replace(
+    /:root\s*\{[^}]+\}/s,
+    rootBlock
+  );
   writeFileSync(cssPath, newCss, "utf-8");
-  logEvent("SNR-DEV", "Wrote globals.css :root", "✍️", C.cyan);
+  logEvent("SNR-DEV", `globals.css — primary:${primary} secondary:${secondary}`, "", C.cyan);
 
-  // ── Step 3: launch preview ─────────────────────────────────────────────────
+  // ── Stage 5: ARCHITECT generates 5 color variants for Template Library ────
+  logHandoff("SNR-DEV", "ARCHITECT", "generate 5 color variants for template library");
+  logEvent("ARCHITECT", "Generating 5 color themes…", "", C.yellow);
+  try {
+    const rawVars = await callGroq(
+      `Output ONLY a valid JSON array of exactly 5 objects. No markdown.
+Each: {"id":N,"name":"Two Word","palette":{"primary":"#hex","secondary":"#hex","bg":"#hex","text":"#hex"},"fontDisplay":"'FontName',sans-serif","animationStyle":"flicker|float|glitch|neon-glow|fade-in-up","spacingScale":"compact|normal|airy","shadowStyle":"neon|soft|flat","previewGradient":"linear-gradient(135deg,#hex 0%,#hex 100%)"}
+ids 0-4. All 5 visually distinct (dark, light, neon, muted, vibrant). Themed to subject.`,
+      `5 color themes for: ${prompt}`,
+      2400, 0.95
+    );
+    const variantsData = JSON.parse(rawVars);
+    writeFileSync(variantsPath, JSON.stringify(variantsData, null, 2), "utf-8");
+    writeFileSync(variantsTsPath,
+      `// Auto-generated by architect. Do not edit.\nexport type DesignVariant={id:number;name:string;palette:{primary:string;secondary:string;bg:string;text:string};fontDisplay:string;animationStyle:string;spacingScale:string;shadowStyle:string;previewGradient:string;};\nexport const DESIGN_VARIANTS:DesignVariant[]=${JSON.stringify(variantsData)};\n`,
+      "utf-8"
+    );
+    logEvent("ARCHITECT", `${variantsData.length} color themes ready in template library`, "", C.yellow);
+  } catch (e) {
+    logEvent("ARCHITECT", `Color variants failed: ${e.message}`, "", C.red);
+  }
+
+  logHandoff("ARCHITECT", "PREVIEW", "launch");
   const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-  process.stderr.write(`${C.dim}[  ${elapsed}s]${C.reset}\n`);
+  process.stderr.write(`${C.dim}[pipeline ${elapsed}s]${C.reset}\n`);
 
-  // Use the launch_frontend tool handler directly
   const launchTool = TOOLS.find(t => t.name === "launch_frontend");
   if (launchTool) {
-    const result = await launchTool.handler({ url: "http://localhost:3000" });
-    logEvent("PREVIEW", "Launched at http://localhost:3000", "🌐", C.green);
+    emitRoleBanner("PREVIEW");
+    await launchTool.handler({ url: "http://localhost:3000" });
+    logEvent("PREVIEW", "Launched at http://localhost:3000", "", C.green);
   }
 }
 
 async function runAgent(prompt) {
   const intent = classifyIntent(prompt);
   const startMs = Date.now();
-  let lastToolName = null;
+
+  // ── Step 1: Orchestrator classifies intent ─────────────────────────────────
+  logEvent("ORCHESTRATOR", `Intent classified: "${intent}" — routing…`, "", C.white);
 
   // ── Website intent: bypass tool-calling, call Groq directly ───────────────
   if (intent === "website") {
+    logHandoff("ORCHESTRATOR", "ARCHITECT", "website generation pipeline");
     try {
       await buildWebsiteDirect(prompt);
     } catch (e) {
@@ -1368,42 +2201,79 @@ async function runAgent(prompt) {
     return;
   }
 
-  // Emit role banner based on intent
-  if (intent === "fix") {
-    emitRoleBanner("SNR-DEV");
-    logEvent("SNR-DEV", "Loading context — preparing fix…", "🔎", C.cyan);
-  } else if (intent === "feature") {
-    emitRoleBanner("SNR-DEV");
-    logEvent("SNR-DEV", "Feature boundary scoped — planning implementation…", "📐", C.cyan);
-  } else if (intent === "arch") {
-    emitRoleBanner("ARCHITECT");
-    logEvent("ARCHITECT", "Full-codebase scope — system-level analysis…", "🗺️", C.yellow);
-  } else if (intent === "visual") {
+  // ── Visual editor — direct launch, no sub-agent dispatch needed ────────────
+  if (intent === "visual") {
+    logHandoff("ORCHESTRATOR", "CANVAS", "spatial editor launch");
     emitRoleBanner("CANVAS");
-  } else {
-    emitRoleBanner("ORCHESTRATOR");
+    const launchTool = TOOLS.find(t => t.name === "launch_frontend");
+    if (launchTool) await launchTool.handler({ url: "http://localhost:3001" });
+    return;
   }
 
-  let snrDevLogged = false;
+  // ── Step 2: CODE-EDITOR tier routing ──────────────────────────────────────
+  logHandoff("ORCHESTRATOR", "CODE-EDITOR", `intent=${intent}`);
+  emitRoleBanner("CODE-EDITOR");
 
-  // ── Tool filtering — only give the model what it needs for this intent.
-  // Passing all 11 tools causes Groq to return "Failed to call a function"
-  // because the combined schema exceeds what llama-3.3-70b can reliably handle.
+  const tier = classifyTier(intent, prompt);
+
+  // Determine the active sub-agent role and load its soul
+  let subRole;
+  let agentSoul = '';
+  const ceDir = path.join(AGENTS_DIR_ROOT, "code-editor");
+
+  if (tier === 'architect') {
+    subRole = "ARCHITECT";
+    agentSoul = loadAgentContext(path.join(ceDir, "agents", "architect"));
+    logEvent("CODE-EDITOR", `Tier=arch — dispatching to ARCHITECT`, "", C.yellow);
+    logHandoff("CODE-EDITOR", "ARCHITECT", "system-level scope");
+  } else if (tier === 'uiux') {
+    subRole = "UIUX";
+    agentSoul = loadAgentContext(path.join(ceDir, "agents", "uiux-designer"));
+    logEvent("CODE-EDITOR", `Tier=ui — dispatching to UIUX-DESIGNER`, "", C.yellow);
+    logHandoff("CODE-EDITOR", "UIUX", "UI/UX layer");
+  } else if (tier === 'jnr') {
+    subRole = "JNR-DEV";
+    agentSoul = loadAgentContext(path.join(ceDir, "agents", "jnr-developer"));
+    logEvent("CODE-EDITOR", `Tier=jnr — dispatching to JNR-DEV (single-file fix)`, "", C.yellow);
+    logHandoff("CODE-EDITOR", "JNR-DEV", "single-file scope");
+  } else {
+    subRole = "SNR-DEV";
+    agentSoul = loadAgentContext(path.join(ceDir, "agents", "snr-developer"));
+    logEvent("CODE-EDITOR", `Tier=snr — dispatching to SNR-DEV (multi-file)`, "", C.yellow);
+    logHandoff("CODE-EDITOR", "SNR-DEV", `${intent} scope`);
+  }
+
+  emitRoleBanner(subRole);
+
+  // ── Step 3: Tool set for this tier ────────────────────────────────────────
   const TOOL_MAP = Object.fromEntries(TOOLS.map(t => [t.name, t]));
   const pick = (...names) => names.map(n => TOOL_MAP[n]).filter(Boolean);
 
-  const intentTools = {
-    website: pick("file_read", "file_write", "fetch_images", "launch_frontend", "append_memory"),
-    fix:     pick("file_read", "file_write", "append_memory"),
-    feature: pick("file_read", "file_write", "append_memory"),
-    arch:    pick("file_read", "file_write", "search", "shell_exec", "append_memory"),
-    visual:  pick("launch_frontend", "append_memory"),
-    chat:    [],
+  // qa_site added to fix/feature so site-tester can run post-write validation
+  const tierTools = {
+    architect: pick("file_read", "file_write", "search", "shell_exec", "qa_site", "launch_frontend", "append_memory"),
+    uiux:      pick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
+    snr:       pick("file_read", "file_write", "search", "qa_site", "append_memory"),
+    jnr:       pick("file_read", "file_write", "append_memory"),
   };
-  const activeTools = intentTools[intent] ?? TOOLS;
+  const activeTools = tierTools[tier] ?? tierTools.snr;
 
-  // Use llama-3.3-70b for tool-calling intents — Llama 4 Scout mangles function call format
-  const editModel = intent === "website" ? MODEL : "groq:llama-3.3-70b-versatile";
+  // ── Step 4: Build sub-agent system prompt (base + loaded soul) ────────────
+  const agentSystemPrompt = agentSoul
+    ? `${SYSTEM_PROMPT}\n\n== ACTIVE SUB-AGENT CONTEXT (read and follow this identity) ==\n${agentSoul}`
+    : SYSTEM_PROMPT;
+
+  // llama-3.3-70b is more reliable for tool-calling than llama-4-scout
+  const editModel = "groq:llama-3.3-70b-versatile";
+
+  // ── Step 5: Run the sub-agent query ──────────────────────────────────────
+  // Inject active pool key for gitclaw's query()
+  const _agentKey = await getKey();
+  process.env.GROQ_API_KEY = _agentKey.key;
+  logEvent("KEYPOOL", `agent query() using ${_agentKey.label}`, "🔑", C.dim);
+
+  let lastToolName = null;
+  let snrSplitLogged = false;
 
   for await (const msg of query({
     prompt,
@@ -1411,25 +2281,25 @@ async function runAgent(prompt) {
     model: editModel,
     tools: activeTools,
     replaceBuiltinTools: true,
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: agentSystemPrompt,
     maxTurns: 20,
     constraints: { maxTokens: 4096 },
   })) {
     switch (msg.type) {
+
       case "delta":
         process.stdout.write(msg.content);
         // Detect structured plan blocks emitted by agent personas
         if (msg.content.includes("[ARCHITECT PLAN]")) {
-          process.stderr.write(`\n${C.yellow}${C.bold}[ARCHITECT ]${C.reset} ${C.yellow}Plan received — beginning build pipeline…${C.reset}\n`);
+          process.stderr.write(
+            `\n${C.yellow}${C.bold}[ARCHITECT   ]${C.reset} ${C.yellow}Plan received — beginning build pipeline…${C.reset}\n`
+          );
         }
-        if (msg.content.includes("[SNR SPLIT]") && !snrDevLogged) {
-          snrDevLogged = true;
-          process.stderr.write(`\n${C.cyan}${C.bold}[SNR-DEV   ]${C.reset} ${C.cyan}Work split confirmed — writing files…${C.reset}\n`);
-        }
-        // Detect when agent transitions to writing phase for website builds
-        if (intent === "website" && !snrDevLogged && msg.content.includes("site-content.ts")) {
-          snrDevLogged = true;
-          emitRoleBanner("SNR-DEV");
+        if (msg.content.includes("[SNR SPLIT]") && !snrSplitLogged) {
+          snrSplitLogged = true;
+          process.stderr.write(
+            `\n${C.cyan}${C.bold}[SNR-DEV     ]${C.reset} ${C.cyan}Work split confirmed — writing files…${C.reset}\n`
+          );
         }
         break;
 
@@ -1437,61 +2307,78 @@ async function runAgent(prompt) {
         process.stdout.write("\n");
         const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
         const tokens = msg.usage?.totalTokens ?? "?";
-        process.stderr.write(
-          `${C.dim}[  ${elapsed}s |  tokens: ${tokens} / 4096]${C.reset}\n`
-        );
+        process.stderr.write(`${C.dim}[  ${elapsed}s | tokens: ${tokens} / 4096]${C.reset}\n`);
         break;
       }
 
       case "tool_use": {
         lastToolName = msg.toolName;
         const argsPreview = JSON.stringify(msg.args ?? {}).slice(0, 100);
+        const roleColor = ROLE_CONFIG[subRole]?.color ?? C.cyan;
 
-        // Role-specific tool event log
         if (msg.toolName === "append_memory") {
-          logEvent("MEMORY", `Learning: ${msg.args?.category ?? ""} — ${String(msg.args?.rule ?? "").slice(0, 80)}`, "💾", C.yellow);
+          logEvent("MEMORY", `Learning: ${msg.args?.category ?? ""} — ${String(msg.args?.rule ?? "").slice(0, 80)}`, "", C.yellow);
+
         } else if (msg.toolName === "qa_site") {
-          logEvent("QA", `Validating ${msg.args?.url ?? "site"}…`, "🔍", C.magenta);
+          // site-tester sub-agent takes over for QA
+          logHandoff(subRole, "QA", "post-write validation");
+          emitRoleBanner("QA");
+          logEvent("QA", `Validating ${msg.args?.url ?? "site"}…`, "", C.magenta);
+
         } else if (msg.toolName === "launch_frontend") {
           const port = (msg.args?.url ?? "").includes("3001") ? 3001 : 3000;
           if (port === 3001) {
-            logEvent("EDITOR", `Opening spatial editor at http://localhost:3001`, "✏️", C.magenta);
+            logEvent("EDITOR", `Opening spatial editor at http://localhost:3001`, "", C.magenta);
           } else {
-            logEvent("PREVIEW", `Launching preview at http://localhost:3000`, "🌐", C.green);
+            logEvent("PREVIEW", `Launching preview at http://localhost:3000`, "", C.green);
           }
+
         } else if (msg.toolName === "file_write") {
+          // Guardrails log emitted by the wrapped handler — we just confirm dispatch here
           const filePath = msg.args?.path ?? "";
-          const fileName = path.basename(filePath);
-          logEvent("SNR-DEV", `Writing → ${filePath}`, "✍️", C.cyan);
+          logEvent(subRole, `Dispatching write → ${filePath}`, "", roleColor);
+
         } else if (msg.toolName === "file_read") {
-          const fileName = path.basename(msg.args?.path ?? "");
-          process.stderr.write(`${C.dim}[→ file_read] ${fileName}${C.reset}\n`);
+          process.stderr.write(
+            `${C.dim}[${new Date().toTimeString().slice(0,8)}] [${subRole.padEnd(12)}] ← file_read ${path.basename(msg.args?.path ?? "")}${C.reset}\n`
+          );
+
         } else if (msg.toolName === "shell_exec") {
-          logEvent("ARCHITECT", `shell_exec → ${String(msg.args?.command ?? "").slice(0, 80)}`, "🔬", C.yellow);
+          logEvent("ARCHITECT", `shell_exec → ${String(msg.args?.command ?? "").slice(0, 80)}`, "", C.yellow);
+
+        } else if (msg.toolName === "search") {
+          logEvent(subRole, `search → ${String(msg.args?.pattern ?? "").slice(0, 60)}`, "", roleColor);
+
         } else {
-          process.stderr.write(`${C.dim}[→ ${msg.toolName}] ${argsPreview}${C.reset}\n`);
+          process.stderr.write(`${C.dim}[→ ${subRole}:${msg.toolName}] ${argsPreview}${C.reset}\n`);
         }
         break;
       }
 
       case "tool_result": {
-        // QA result surface
         if (lastToolName === "qa_site") {
           try {
             const result = JSON.parse(msg.content ?? "{}");
             const ok = result.status === "ok" || (result.errors ?? []).length === 0;
-            const icon = ok ? "✅" : "❌";
             const errCount = (result.errors ?? []).length;
             const score = result.visual_score ?? "?";
             logEvent("QA",
-              `${icon} status=${ok ? "pass" : "fail"} | score=${score} | errors=${errCount}`,
-              ok ? "✅" : "❌",
-              ok ? C.green : C.red
+              `${ok ? "PASS" : "FAIL"} | score=${score} | errors=${errCount}`,
+              "", ok ? C.green : C.red
             );
             if (!ok && result.fix_instruction) {
-              logEvent("SNR-DEV", `Fix instruction → ${String(result.fix_instruction).slice(0, 120)}`, "🩹", C.cyan);
+              // QA hands back to the sub-agent for fixes
+              logHandoff("QA", subRole, "fix cycle");
+              logEvent(subRole, `Fix instruction → ${String(result.fix_instruction).slice(0, 120)}`, "", ROLE_CONFIG[subRole]?.color ?? C.cyan);
             }
-          } catch { /* non-JSON QA result — ignore */ }
+          } catch { /* non-JSON QA result */ }
+
+        } else if (lastToolName === "file_write") {
+          const content = msg.content ?? "";
+          if (content.startsWith("BLOCKED:")) {
+            // Already logged by the guardrails wrapper — just show summary
+            logEvent("GUARDRAILS", `Write aborted — ${content.slice(9, 120)}`, "", C.red);
+          }
         }
         break;
       }
@@ -1505,7 +2392,7 @@ async function runAgent(prompt) {
   }
 
   const totalElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-  process.stderr.write(`${C.dim}[✓ done in ${totalElapsed}s]${C.reset}\n`);
+  process.stderr.write(`${C.dim}[✓ ${subRole ?? "ORCHESTRATOR"} done in ${totalElapsed}s]${C.reset}\n`);
 }
 
 // ── REPL ────────────────────────────────────────────────────────────────────────

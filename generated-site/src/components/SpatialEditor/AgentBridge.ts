@@ -26,7 +26,7 @@ const VARIATION_COLORS = ['#ef4444', '#facc15', '#ec4899', '#22d3ee', '#a78bfa']
  * The agent must return a strict JSON block so we can parse structured data.
  */
 function buildVariationPrompt(componentId: string, currentCode: string, theme: string): string {
-  return `You are a UI code generator acting as the uiux-designer persona.
+  return `[AGENT-BRIDGE] You are a UI code generator acting as the uiux-designer persona.
 
 The user is spatially editing their website by pointing at components with hand tracking.
 They have pointed at component: "${componentId}".
@@ -168,7 +168,7 @@ export async function requestVariations(
  * @param code           The new TSX source to write
  */
 export async function commitVariation(componentPath: string, code: string): Promise<void> {
-  const prompt = `You are the jnr-developer persona making a targeted file edit.
+  const prompt = `[AGENT-BRIDGE] You are the jnr-developer persona making a targeted file edit.
   
 Overwrite the file at path:
 ${componentPath}
