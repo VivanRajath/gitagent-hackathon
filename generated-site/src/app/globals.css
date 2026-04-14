@@ -1,11 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --color-primary: #8B0A1A;
-  --color-secondary: #660033;
-  --color-bg: #1A1D23;
-  --color-text: #FFFFFF;
-  --font-display: 'Bebas Neue', sans-serif;
+  --color-primary: #1a1d23;
+  --color-secondary: #ff9900;
+  --color-bg: #0a0a0a;
+  --color-text: #ffffff;
+  --color-on-primary: #ffffff;
+  --color-on-secondary: #000000;
+  --font-display: 'Montserrat', sans-serif;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -84,9 +86,12 @@ body {
 }
 
 @keyframes glitch {
-  0%{text-shadow:2px 0 #f00,-2px 0 #0ff} 20%{text-shadow:-3px 0 #f00,3px 0 #0ff}
-  40%{text-shadow:2px 0 transparent} 60%{text-shadow:-3px 0 #f00,3px 0 #0ff}
-  80%{text-shadow:2px 0 #f00,-2px 0 #0ff} 100%{text-shadow:none}
+  0%  { text-shadow: 2px 0 var(--color-primary), -2px 0 var(--color-secondary); }
+  20% { text-shadow: -3px 0 var(--color-primary), 3px 0 var(--color-secondary); }
+  40% { text-shadow: 2px 0 transparent; }
+  60% { text-shadow: -3px 0 var(--color-primary), 3px 0 var(--color-secondary); }
+  80% { text-shadow: 2px 0 var(--color-primary), -2px 0 var(--color-secondary); }
+  100%{ text-shadow: none; }
 }
 
 @keyframes fadeInUp {
@@ -95,8 +100,8 @@ body {
 }
 
 @keyframes neonGlow {
-  0%,100%{text-shadow:0 0 5px currentColor,0 0 10px currentColor,0 0 20px currentColor}
-  50%{text-shadow:0 0 10px currentColor,0 0 25px currentColor,0 0 50px currentColor}
+  0%,100%{text-shadow:0 0 6px var(--color-secondary),0 0 12px var(--color-secondary),0 0 24px var(--color-secondary)}
+  50%{text-shadow:0 0 12px var(--color-secondary),0 0 28px var(--color-secondary),0 0 55px var(--color-secondary)}
 }
 
 @keyframes accentPulse {
@@ -105,7 +110,8 @@ body {
 }
 
 @keyframes redPulse {
-  0%,100%{box-shadow:0 0 0 0 rgba(204,0,0,0.5)} 70%{box-shadow:0 0 0 16px rgba(204,0,0,0)}
+  0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--color-primary) 50%,transparent)}
+  70%{box-shadow:0 0 0 16px transparent}
 }
 
 /* ── Reduced motion ─────────────────────────────────────────────────────────── */

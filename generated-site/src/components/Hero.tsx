@@ -32,7 +32,7 @@ function HeroCinematic({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
         <div className="fade-in-up-delay-2" style={{display:'flex',flexWrap:'wrap',gap:'1rem',justifyContent:'center'}}>
           <button className="accent-pulse" style={{
             padding:'0.9rem 2.25rem',borderRadius:'9999px',fontWeight:700,
-            background:'var(--color-secondary)',color:'#000',
+            background:'var(--color-secondary)',color:'var(--color-on-secondary)',
             border:'none',cursor:'pointer',fontSize:'1.05rem',
             fontFamily:'var(--font-display)',letterSpacing:'0.03em'}}>
             {cta1}
@@ -77,7 +77,7 @@ function HeroSplit({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
         <div style={{display:'flex',gap:'1rem',flexWrap:'wrap'}}>
           <button style={{
             padding:'0.85rem 2rem',borderRadius:'0.5rem',fontWeight:700,
-            background:'var(--color-secondary)',color:'#000',border:'none',cursor:'pointer',
+            background:'var(--color-secondary)',color:'var(--color-on-secondary)',border:'none',cursor:'pointer',
             fontSize:'0.95rem',fontFamily:'var(--font-display)',letterSpacing:'0.04em',
           }}>
             {cta1}
@@ -156,7 +156,7 @@ function HeroBoldType({ headline, subtext, cta1, cta2 }: HeroProps) {
       <div style={{display:'flex',gap:'1rem',justifyContent:'center',flexWrap:'wrap'}}>
         <button style={{
           padding:'1rem 2.5rem',fontWeight:800,fontSize:'1rem',
-          background:'var(--color-secondary)',color:'#000',
+          background:'var(--color-secondary)',color:'var(--color-on-secondary)',
           border:'none',cursor:'pointer',fontFamily:'var(--font-display)',
           letterSpacing:'0.06em',textTransform:'uppercase',
           clipPath:'polygon(0.5rem 0%,100% 0%,calc(100% - 0.5rem) 100%,0% 100%)',
@@ -204,7 +204,7 @@ function HeroMagazine({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
               <span key={tag} style={{
                 fontSize:'0.65rem',padding:'0.25rem 0.6rem',borderRadius:'3px',
                 background: i===0 ? 'var(--color-secondary)' : 'rgba(255,255,255,0.08)',
-                color: i===0 ? '#000' : 'var(--color-text)',
+                color: i===0 ? 'var(--color-on-secondary)' : 'var(--color-text)',
                 fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',
               }}>{tag}</span>
             ))}
@@ -229,7 +229,7 @@ function HeroMagazine({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
         <div style={{display:'flex',gap:'1rem',paddingTop:'2rem',borderTop:'1px solid rgba(255,255,255,0.08)'}}>
           <button style={{
             flex:1,padding:'1rem',fontWeight:700,fontSize:'0.9rem',
-            background:'var(--color-secondary)',color:'#000',border:'none',
+            background:'var(--color-secondary)',color:'var(--color-on-secondary)',border:'none',
             cursor:'pointer',fontFamily:'var(--font-display)',borderRadius:'0.25rem',
           }}>{cta1}</button>
           <button style={{
@@ -322,7 +322,7 @@ function HeroAsymmetric({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) 
         <div style={{display:'flex',gap:'1.25rem',alignItems:'center',flexWrap:'wrap'}}>
           <button style={{
             padding:'0.9rem 2.25rem',fontWeight:800,fontSize:'0.95rem',
-            background:'var(--color-secondary)',color:'#000',border:'none',
+            background:'var(--color-secondary)',color:'var(--color-on-secondary)',border:'none',
             cursor:'pointer',fontFamily:'var(--font-display)',letterSpacing:'0.05em',
             textTransform:'uppercase',
           }}>

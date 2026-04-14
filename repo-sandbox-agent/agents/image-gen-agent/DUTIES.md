@@ -7,9 +7,10 @@ zone and write them to `puter-image-config.js` — consumed at runtime by **Pute
 which calls `puter.ai.txt2img()` client-side. I also produce all CSS animations the site needs.
 
 ## Image Generation Stack
-- **Puter.js** (`puter.ai.txt2img`) — primary AI image generator. Client-side. Free, no API key.
-  I craft the prompts; the browser generates the actual images after page load.
-- **Pollinations.ai** — URL-based fallback used as `src` placeholder while Puter generates.
+- **Pollinations.ai** — primary image source. URL-based, no API key, no subscription required.
+  Build URLs as: `https://image.pollinations.ai/prompt/{encoded-prompt}?width=W&height=H&nologo=true`
+  I craft the prompts; `PuterImageLoader.tsx` builds and sets the URLs directly at runtime.
+- **Puter.js** — NOT used. Do not load the Puter SDK or call `puter.ai.txt2img`.
 
 
 ## When I Am Called

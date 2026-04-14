@@ -112,7 +112,7 @@ export default function TemplateLibrary({ onClose, pinnedElement, componentType 
   useEffect(() => {
     if (!pinnedElement) return;
     const root = getComponentRoot(pinnedElement);
-    const props = ['--color-primary', '--color-secondary', '--color-bg', '--color-text'];
+    const props = ['--color-primary', '--color-secondary', '--color-bg', '--color-text', '--color-on-primary', '--color-on-secondary'];
     const snap: Record<string, string> = {};
     props.forEach(p => { snap[p] = root.style.getPropertyValue(p); });
     originalVars.current = snap;
@@ -153,10 +153,19 @@ export default function TemplateLibrary({ onClose, pinnedElement, componentType 
   }, [tab, colorVariants, activeColorId, activeLayoutIdx, layoutMeta]);
 
   const applyToRoot = useCallback((root: HTMLElement, palette: DesignVariant['palette']) => {
-    root.style.setProperty('--color-primary',   palette.primary);
-    root.style.setProperty('--color-secondary', palette.secondary);
-    root.style.setProperty('--color-bg',        palette.bg);
-    root.style.setProperty('--color-text',      palette.text);
+    const hexLum = (hex: string) => {
+      const c = hex.replace(/^#/, '');
+      const r = parseInt(c.slice(0,2)||'00',16);
+      const g = parseInt(c.slice(2,4)||'00',16);
+      const b = parseInt(c.slice(4,6)||'00',16);
+      return (0.299*r + 0.587*g + 0.114*b) / 255;
+    };
+    root.style.setProperty('--color-primary',      palette.primary);
+    root.style.setProperty('--color-secondary',    palette.secondary);
+    root.style.setProperty('--color-bg',           palette.bg);
+    root.style.setProperty('--color-text',         palette.text);
+    root.style.setProperty('--color-on-primary',   hexLum(palette.primary)   > 0.45 ? '#000000' : '#ffffff');
+    root.style.setProperty('--color-on-secondary', hexLum(palette.secondary) > 0.45 ? '#000000' : '#ffffff');
   }, []);
 
   const previewColor = useCallback((v: DesignVariant) => {

@@ -23,7 +23,7 @@ function CTAFullbleed({ headline, body, button, imageUrl }: CTAProps) {
         <button className="float accent-pulse" style={{
           display:'inline-flex',alignItems:'center',gap:'0.5rem',
           padding:'1.1rem 2.8rem',borderRadius:'9999px',fontWeight:800,fontSize:'1.1rem',
-          background:'var(--color-secondary)',color:'#000',border:'none',cursor:'pointer',
+          background:'var(--color-secondary)',color:'var(--color-on-secondary)',border:'none',cursor:'pointer',
           fontFamily:'var(--font-display)',
         }}>
           {button} →
@@ -64,7 +64,7 @@ function CTASplit({ headline, body, button, imageUrl }: CTAProps) {
         <div style={{display:'flex',gap:'1rem',flexWrap:'wrap'}}>
           <button style={{
             padding:'0.9rem 2rem',borderRadius:'0.5rem',fontWeight:700,
-            background:'var(--color-secondary)',color:'#000',
+            background:'var(--color-secondary)',color:'var(--color-on-secondary)',
             border:'none',cursor:'pointer',fontSize:'0.95rem',fontFamily:'var(--font-display)',
           }}>{button}</button>
           <button style={{
@@ -141,7 +141,7 @@ function CTAGlassCard({ headline, body, button, imageUrl }: CTAProps) {
           width:'3rem',height:'3rem',borderRadius:'50%',
           background:'var(--color-secondary)',margin:'0 auto 2rem',
           display:'flex',alignItems:'center',justifyContent:'center',
-          fontSize:'1.4rem',color:'#000',
+          fontSize:'1.4rem',color:'var(--color-on-secondary)',
         }}>★</div>
         <h2 style={{fontSize:'clamp(1.8rem,4vw,3rem)',fontWeight:900,color:'var(--color-text)',
           fontFamily:'var(--font-display)',letterSpacing:'-0.02em',marginBottom:'1.25rem'}}>
@@ -152,7 +152,7 @@ function CTAGlassCard({ headline, body, button, imageUrl }: CTAProps) {
         </p>
         <button style={{
           padding:'1rem 2.5rem',borderRadius:'9999px',fontWeight:800,
-          background:'var(--color-secondary)',color:'#000',border:'none',cursor:'pointer',
+          background:'var(--color-secondary)',color:'var(--color-on-secondary)',border:'none',cursor:'pointer',
           fontSize:'1rem',fontFamily:'var(--font-display)',letterSpacing:'0.04em',
           boxShadow:'0 0 24px color-mix(in srgb,var(--color-secondary) 50%,transparent)',
         }}>{button}</button>
@@ -187,7 +187,7 @@ function CTAHorizBar({ headline, body, button }: CTAProps) {
         <div style={{display:'flex',gap:'1rem',alignItems:'center',flexShrink:0}}>
           <button style={{
             padding:'0.85rem 2rem',borderRadius:'9999px',fontWeight:700,
-            background:'var(--color-secondary)',color:'#000',border:'none',
+            background:'var(--color-secondary)',color:'var(--color-on-secondary)',border:'none',
             cursor:'pointer',fontSize:'0.9rem',fontFamily:'var(--font-display)',
             letterSpacing:'0.04em',whiteSpace:'nowrap',
           }}>{button}</button>

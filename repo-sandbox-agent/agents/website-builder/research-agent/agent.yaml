@@ -1,0 +1,20 @@
+name: research-agent
+version: 1.0.0
+description: >
+  Discovers the design DNA for a website request. Returns site type, aesthetic,
+  color palette, layout variants, and image keywords as structured JSON.
+  Always the first agent called in the website build pipeline.
+
+model:
+  preferred: "groq:llama-3.3-70b-versatile"
+
+runtime:
+  max_tokens: 1000
+  temperature: 0.6
+
+output: json
+
+tags:
+  - website-builder
+  - research
+  - design

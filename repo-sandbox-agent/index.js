@@ -46,7 +46,7 @@ function classifyIntent(prompt) {
   const p = prompt.toLowerCase();
   // AgentBridge variation/commit prompts must never become website builds
   if (p.startsWith("[agent-bridge]") || p.startsWith("you are a ui code generator") ||
-      p.startsWith("you are the jnr-developer persona")) return "feature";
+    p.startsWith("you are the jnr-developer persona")) return "feature";
   if (p.includes("[pinch-edit") || p.includes("[delete-node") || p.includes("[swipe")) return "website";
   if (/\b(website|landing page|site|make|create|build|theme|generate|themed)\b/.test(p) &&
     !/\bfix\b|\bdebug\b/.test(p)) return "website";
@@ -78,6 +78,8 @@ const FULL_GLOBALS_CSS_TEMPLATE = `@import "tailwindcss";
   --color-secondary: #c9a84c;
   --color-bg: #0d0d0d;
   --color-text: #e8d5b7;
+  --color-on-primary: #ffffff;
+  --color-on-secondary: #000000;
   --font-display: 'Cinzel', serif;
 }
 
@@ -157,9 +159,12 @@ body {
 }
 
 @keyframes glitch {
-  0%{text-shadow:2px 0 #f00,-2px 0 #0ff} 20%{text-shadow:-3px 0 #f00,3px 0 #0ff}
-  40%{text-shadow:2px 0 transparent} 60%{text-shadow:-3px 0 #f00,3px 0 #0ff}
-  80%{text-shadow:2px 0 #f00,-2px 0 #0ff} 100%{text-shadow:none}
+  0%  { text-shadow: 2px 0 var(--color-primary), -2px 0 var(--color-secondary); }
+  20% { text-shadow: -3px 0 var(--color-primary), 3px 0 var(--color-secondary); }
+  40% { text-shadow: 2px 0 transparent; }
+  60% { text-shadow: -3px 0 var(--color-primary), 3px 0 var(--color-secondary); }
+  80% { text-shadow: 2px 0 var(--color-primary), -2px 0 var(--color-secondary); }
+  100%{ text-shadow: none; }
 }
 
 @keyframes fadeInUp {
@@ -168,8 +173,8 @@ body {
 }
 
 @keyframes neonGlow {
-  0%,100%{text-shadow:0 0 5px currentColor,0 0 10px currentColor,0 0 20px currentColor}
-  50%{text-shadow:0 0 10px currentColor,0 0 25px currentColor,0 0 50px currentColor}
+  0%,100%{text-shadow:0 0 6px var(--color-secondary),0 0 12px var(--color-secondary),0 0 24px var(--color-secondary)}
+  50%{text-shadow:0 0 12px var(--color-secondary),0 0 28px var(--color-secondary),0 0 55px var(--color-secondary)}
 }
 
 @keyframes accentPulse {
@@ -178,7 +183,8 @@ body {
 }
 
 @keyframes redPulse {
-  0%,100%{box-shadow:0 0 0 0 rgba(204,0,0,0.5)} 70%{box-shadow:0 0 0 16px rgba(204,0,0,0)}
+  0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--color-primary) 50%,transparent)}
+  70%{box-shadow:0 0 0 16px transparent}
 }
 
 /* ── Reduced motion ─────────────────────────────────────────────────────────── */
@@ -255,7 +261,7 @@ export default function Hero() {
           display:'flex',flexWrap:'wrap',gap:'1rem',justifyContent:'center'}}>
           <button className="accent-pulse" style={{
             padding:'0.9rem 2.25rem',borderRadius:'9999px',fontWeight:700,
-            background:'var(--color-secondary)',color:'#000',
+            background:'var(--color-secondary)',color:'var(--color-on-secondary)',
             border:'none',cursor:'pointer',fontSize:'1.05rem',
             fontFamily:'var(--font-display)',letterSpacing:'0.03em'}}>{cta1}</button>
           <button style={{
@@ -317,7 +323,7 @@ export default function CTABanner() {
       <div style={{position:'relative',zIndex:10,maxWidth:'46rem',margin:'0 auto'}}>
         <h2 className="neon-glow" style={{fontSize:'3rem',fontWeight:900,marginBottom:'1.25rem',color:'var(--color-secondary)',lineHeight:1.1,letterSpacing:'-0.02em',fontFamily:'var(--font-display)'}}>{headline}</h2>
         <p style={{fontSize:'1.2rem',lineHeight:1.7,marginBottom:'3rem',opacity:0.9,color:'var(--color-text)',maxWidth:'36rem',margin:'0 auto 3rem'}}>{body}</p>
-        <button className="float accent-pulse" style={{display:'inline-flex',alignItems:'center',gap:'0.5rem',padding:'1.1rem 2.8rem',borderRadius:'9999px',fontWeight:800,fontSize:'1.15rem',background:'var(--color-secondary)',color:'#000',border:'none',cursor:'pointer',fontFamily:'var(--font-display)'}}>
+        <button className="float accent-pulse" style={{display:'inline-flex',alignItems:'center',gap:'0.5rem',padding:'1.1rem 2.8rem',borderRadius:'9999px',fontWeight:800,fontSize:'1.15rem',background:'var(--color-secondary)',color:'var(--color-on-secondary)',border:'none',cursor:'pointer',fontFamily:'var(--font-display)'}}>
           {button} <ArrowRight size={22}/>
         </button>
       </div>
@@ -801,14 +807,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   if (contentIsBroken) {
     writeFileSync(contentFile, `export const SITE = {
   navbar: { brand: "My Site", links: [{label:"Home",href:"/"},{label:"About",href:"/about"},{label:"Contact",href:"/contact"}] },
-  hero: { headline:"Welcome", subtext:"A great place to start.", cta1:"Get Started", cta2:"Learn More", imageUrl:"https://image.pollinations.ai/prompt/abstract+cinematic+dark?width=1600&height=900&nologo=true&seed=73421" },
+  hero: { headline:"Welcome", subtext:"A great place to start.", cta1:"Get Started", cta2:"Learn More", imageUrl:"https://image.pollinations.ai/prompt/abstract+cinematic+dark?width=1600&height=900&nologo=true&model=turbo&seed=73421" },
   cards: [
-    {title:"Feature One",desc:"An amazing feature.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+portrait?width=400&height=300&nologo=true&seed=11111"},
-    {title:"Feature Two",desc:"Another great aspect.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+landscape?width=400&height=300&nologo=true&seed=22222"},
-    {title:"Feature Three",desc:"Built for the future.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+product?width=400&height=300&nologo=true&seed=33333"},
+    {title:"Feature One",desc:"An amazing feature.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+portrait?width=400&height=300&nologo=true&model=turbo&seed=11111"},
+    {title:"Feature Two",desc:"Another great aspect.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+landscape?width=400&height=300&nologo=true&model=turbo&seed=22222"},
+    {title:"Feature Three",desc:"Built for the future.",imageUrl:"https://image.pollinations.ai/prompt/cinematic+product?width=400&height=300&nologo=true&model=turbo&seed=33333"},
   ],
   features: { sectionTitle:"Why This Stands Out", items:[{icon:"⭐",title:"Quality",desc:"Built with care."},{icon:"🚀",title:"Speed",desc:"Fast and smooth."},{icon:"🎨",title:"Design",desc:"Beautiful visuals."},{icon:"🔒",title:"Reliable",desc:"Always dependable."}] },
-  cta: { headline:"Ready to Begin?", body:"Take the next step.", button:"Start Now", imageUrl:"https://image.pollinations.ai/prompt/cinematic+epic+wide?width=1200&height=400&nologo=true&seed=55555" },
+  cta: { headline:"Ready to Begin?", body:"Take the next step.", button:"Start Now", imageUrl:"https://image.pollinations.ai/prompt/cinematic+epic+wide?width=1200&height=400&nologo=true&model=turbo&seed=55555" },
   footer: { brand:"My Site", tagline:"Building the future, one pixel at a time.", links:[{label:"About",href:"/about"},{label:"Contact",href:"/contact"}] },
   variants: { navbar:0, hero:0, cards:0, features:0, cta:0, footer:0 },
 };`, "utf-8");
@@ -905,7 +911,7 @@ async function getKey() {
   // All keys cooling — wait for the soonest one
   const soonest = KEY_POOL.reduce((a, b) => a.cooldownUntil < b.cooldownUntil ? a : b);
   const wait = Math.max(0, soonest.cooldownUntil - Date.now());
-  logEvent("KEYPOOL", `All ${KEY_POOL.length} keys rate-limited — waiting ${(wait/1000).toFixed(1)}s for ${soonest.label}`, "⏳", C.red);
+  logEvent("KEYPOOL", `All ${KEY_POOL.length} keys rate-limited — waiting ${(wait / 1000).toFixed(1)}s for ${soonest.label}`, "⏳", C.red);
   await new Promise(r => setTimeout(r, wait + 200));
   soonest.cooldownUntil = 0;
   return soonest;
@@ -927,10 +933,10 @@ function coolKey(entry, headers) {
 function keyPoolStatus() {
   const now = Date.now();
   return KEY_POOL.map(e => ({
-    label:       e.label,
-    uses:        e.uses,
-    errors:      e.errors,
-    status:      e.cooldownUntil > now
+    label: e.label,
+    uses: e.uses,
+    errors: e.errors,
+    status: e.cooldownUntil > now
       ? `COOLING (${((e.cooldownUntil - now) / 1000).toFixed(1)}s)`
       : "READY",
   }));
@@ -953,9 +959,9 @@ function loadAgentContext(agentDir) {
 // ── Synchronous guardrails — runs before every file_write (no LLM call) ───────
 // Returns { verdict: "ALLOW"|"BLOCK", agent?, reason?, checked_by? }
 function guardrailsSync(filePath, content) {
-  const fp  = filePath ?? '';
-  const ct  = content  ?? '';
-  const bn  = path.basename(fp);
+  const fp = filePath ?? '';
+  const ct = content ?? '';
+  const bn = path.basename(fp);
 
   // policy-enforcer: only lock UX infrastructure — design components are writable
   const LOCKED = [
@@ -964,27 +970,35 @@ function guardrailsSync(filePath, content) {
     'SpatialEditor.tsx', 'SpatialContext.tsx', 'AgentBridge.ts',
   ];
   if (LOCKED.includes(bn))
-    return { verdict:'BLOCK', agent:'policy-enforcer',
-             reason:`${bn} is locked UX infrastructure — agents should write site-content.ts instead` };
+    return {
+      verdict: 'BLOCK', agent: 'policy-enforcer',
+      reason: `${bn} is locked UX infrastructure — agents should write site-content.ts instead`
+    };
 
   // secret-sentinel: blocked file extensions
   if (/\.(env|pem|key|pfx|p12|secret)$/.test(fp))
-    return { verdict:'BLOCK', agent:'secret-sentinel',
-             reason:`Writes to *${path.extname(fp)} files are blocked` };
+    return {
+      verdict: 'BLOCK', agent: 'secret-sentinel',
+      reason: `Writes to *${path.extname(fp)} files are blocked`
+    };
 
   // secret-sentinel: credential patterns in content
   if (/(?:GROQ_API_KEY|API_KEY|SECRET_KEY|PASSWORD|PRIVATE_KEY)\s*[=:]\s*["'][^"']{8,}/i.test(ct))
-    return { verdict:'BLOCK', agent:'secret-sentinel',
-             reason:'Potential secret/credential pattern in file content' };
+    return {
+      verdict: 'BLOCK', agent: 'secret-sentinel',
+      reason: 'Potential secret/credential pattern in file content'
+    };
 
   // diff-auditor: dangerous shell patterns
   if (/(?:rm\s+-rf\s+\/|>\s*\/etc\/|chmod\s+777|eval\s*\(process\.env)/.test(ct))
-    return { verdict:'BLOCK', agent:'diff-auditor',
-             reason:'Dangerous shell/eval pattern detected in content' };
+    return {
+      verdict: 'BLOCK', agent: 'diff-auditor',
+      reason: 'Dangerous shell/eval pattern detected in content'
+    };
 
   return {
     verdict: 'ALLOW',
-    checked_by: ['policy-enforcer','secret-sentinel','diff-auditor','scope-validator'],
+    checked_by: ['policy-enforcer', 'secret-sentinel', 'diff-auditor', 'scope-validator'],
   };
 }
 
@@ -1274,11 +1288,11 @@ STEP 1 — Write site-content.ts with ALL sections AND variants block:
   export const SITE = {
     navbar: { brand: "...", links: [{label:"...",href:"/..."},...] },
     hero: { headline:"...", subtext:"...", cta1:"...", cta2:"...",
-            imageUrl:"https://image.pollinations.ai/prompt/THEME+cinematic?width=1600&height=900&nologo=true&seed=NNNNN" },
+            imageUrl:"https://image.pollinations.ai/prompt/THEME+cinematic?width=1600&height=900&nologo=true&model=turbo&seed=NNNNN" },
     cards: [
-      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene?width=400&height=300&nologo=true&seed=NNNNN"},
-      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene2?width=400&height=300&nologo=true&seed=NNNNN"},
-      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene3?width=400&height=300&nologo=true&seed=NNNNN"},
+      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene?width=400&height=300&nologo=true&model=turbo&seed=NNNNN"},
+      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene2?width=400&height=300&nologo=true&model=turbo&seed=NNNNN"},
+      {title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/THEME+scene3?width=400&height=300&nologo=true&model=turbo&seed=NNNNN"},
     ],
     features: { sectionTitle:"...", items:[
       {icon:"emoji",title:"...",desc:"..."},
@@ -1287,7 +1301,7 @@ STEP 1 — Write site-content.ts with ALL sections AND variants block:
       {icon:"emoji",title:"...",desc:"..."},
     ]},
     cta: { headline:"...", body:"...", button:"...",
-           imageUrl:"https://image.pollinations.ai/prompt/THEME+wide?width=1200&height=400&nologo=true&seed=NNNNN" },
+           imageUrl:"https://image.pollinations.ai/prompt/THEME+wide?width=1200&height=400&nologo=true&model=turbo&seed=NNNNN" },
     footer: { brand:"...", tagline:"...", links:[{label:"...",href:"/..."},...] },
     variants: {
       navbar:   N,   // 0-4 — MUST match the site personality
@@ -1376,10 +1390,10 @@ function startApiServerIfNeeded() {
           const voiceToolMap = Object.fromEntries(TOOLS.map(t => [t.name, t]));
           const voicePick = (...names) => names.map(n => voiceToolMap[n]).filter(Boolean);
           const voiceTools = {
-            fix:     voicePick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
+            fix: voicePick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
             feature: voicePick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
-            arch:    voicePick("file_read", "file_write", "search", "shell_exec", "qa_site", "launch_frontend", "append_memory"),
-            chat:    [],
+            arch: voicePick("file_read", "file_write", "search", "shell_exec", "qa_site", "launch_frontend", "append_memory"),
+            chat: [],
           }[voiceIntent] ?? voicePick("file_read", "file_write", "search", "append_memory");
 
           // Inject active pool key so gitclaw's query() picks it up
@@ -1443,24 +1457,37 @@ function startApiServerIfNeeded() {
 
           // Map component name → CSS selector
           const SEL = {
-            navbar:   "nav",
-            hero:     "section:first-of-type",
-            cards:    "section:nth-of-type(2)",
+            navbar: "nav",
+            hero: "section:first-of-type",
+            cards: "section:nth-of-type(2)",
             features: "section:nth-of-type(3)",
-            cta:      "section:nth-of-type(4)",
-            footer:   "footer",
-            header:   "header",
+            cta: "section:nth-of-type(4)",
+            footer: "footer",
+            header: "header",
           };
           const selector = SEL[component] ?? component;
+
+          // Compute contrast colors
+          const hexLum = (hex) => {
+            const c = hex.replace(/^#/, "");
+            const r = parseInt(c.slice(0,2)||"00",16);
+            const g = parseInt(c.slice(2,4)||"00",16);
+            const b = parseInt(c.slice(4,6)||"00",16);
+            return (0.299*r + 0.587*g + 0.114*b) / 255;
+          };
+          const onPrimary   = hexLum(variant.palette.primary)   > 0.45 ? "#000000" : "#ffffff";
+          const onSecondary = hexLum(variant.palette.secondary) > 0.45 ? "#000000" : "#ffffff";
 
           // Build override block
           const block =
             `\n/* [COMPONENT-OVERRIDE: ${component}] */\n` +
             `${selector} {\n` +
-            `  --color-primary:   ${variant.palette.primary};\n` +
-            `  --color-secondary: ${variant.palette.secondary};\n` +
-            `  --color-bg:        ${variant.palette.bg};\n` +
-            `  --color-text:      ${variant.palette.text};\n` +
+            `  --color-primary:      ${variant.palette.primary};\n` +
+            `  --color-secondary:    ${variant.palette.secondary};\n` +
+            `  --color-bg:           ${variant.palette.bg};\n` +
+            `  --color-text:         ${variant.palette.text};\n` +
+            `  --color-on-primary:   ${onPrimary};\n` +
+            `  --color-on-secondary: ${onSecondary};\n` +
             `}\n`;
 
           // Remove any existing override for this component, then append new one
@@ -1490,7 +1517,7 @@ function startApiServerIfNeeded() {
       req.on("end", () => {
         try {
           const { component, variantIndex } = JSON.parse(body);
-          const validComponents = ["navbar","hero","cards","features","cta","footer"];
+          const validComponents = ["navbar", "hero", "cards", "features", "cta", "footer"];
           if (!validComponents.includes(component)) throw new Error(`Unknown component: ${component}`);
           const idx = Number(variantIndex);
           if (isNaN(idx) || idx < 0 || idx > 4) throw new Error(`variantIndex must be 0-4, got ${variantIndex}`);
@@ -1555,21 +1582,21 @@ function startApiServerIfNeeded() {
 // ── Agent runner ───────────────────────────────────────────────────────────────
 // Role → display config  (covers all 18 agents + system roles)
 const ROLE_CONFIG = {
-  ORCHESTRATOR:   { emoji: "🤖", color: C.white },
-  "CODE-EDITOR":  { emoji: "📋", color: C.yellow },
-  ARCHITECT:      { emoji: "🏗️", color: C.yellow },
-  "SNR-DEV":      { emoji: "📦", color: C.cyan },
-  "JNR-DEV":      { emoji: "🔧", color: C.blue },
-  UIUX:           { emoji: "🎨", color: C.magenta },
-  QA:             { emoji: "🔍", color: C.magenta },
-  CANVAS:         { emoji: "✏️", color: C.magenta },
-  PREVIEW:        { emoji: "🌐", color: C.green },
-  MEMORY:         { emoji: "💾", color: C.yellow },
-  GUARDRAILS:     { emoji: "🛡️", color: C.red },
-  RESEARCH:       { emoji: "🔭", color: C.cyan },
-  RESOURCER:      { emoji: "🖼️", color: C.cyan },
-  "IMAGE-GEN":    { emoji: "🎨", color: C.magenta },
-  EDITOR:         { emoji: "✏️", color: C.magenta },
+  ORCHESTRATOR: { emoji: "🤖", color: C.white },
+  "CODE-EDITOR": { emoji: "📋", color: C.yellow },
+  ARCHITECT: { emoji: "🏗️", color: C.yellow },
+  "SNR-DEV": { emoji: "📦", color: C.cyan },
+  "JNR-DEV": { emoji: "🔧", color: C.blue },
+  UIUX: { emoji: "🎨", color: C.magenta },
+  QA: { emoji: "🔍", color: C.magenta },
+  CANVAS: { emoji: "✏️", color: C.magenta },
+  PREVIEW: { emoji: "🌐", color: C.green },
+  MEMORY: { emoji: "💾", color: C.yellow },
+  GUARDRAILS: { emoji: "🛡️", color: C.red },
+  RESEARCH: { emoji: "🔭", color: C.cyan },
+  RESOURCER: { emoji: "🖼️", color: C.cyan },
+  "IMAGE-GEN": { emoji: "🎨", color: C.magenta },
+  EDITOR: { emoji: "✏️", color: C.magenta },
 };
 
 function emitRoleBanner(role) {
@@ -1579,20 +1606,20 @@ function emitRoleBanner(role) {
 
 function getPhaseDescription(role) {
   const map = {
-    ORCHESTRATOR:  "Routing intent…",
+    ORCHESTRATOR: "Routing intent…",
     "CODE-EDITOR": "Assessing tier — dispatching to sub-agent…",
-    ARCHITECT:     "Architect analyzing — planning build…",
-    "SNR-DEV":     "Senior Developer splitting work across files…",
-    "JNR-DEV":     "Junior Developer applying targeted edit…",
-    UIUX:          "UI/UX Designer applying visual changes…",
-    QA:            "Site-tester running validation…",
-    CANVAS:        "Opening visual / spatial editor…",
-    PREVIEW:       "Launching preview server…",
-    MEMORY:        "Writing to agent memory…",
-    GUARDRAILS:    "Guardrails checking operation…",
-    RESEARCH:      "Research agent searching…",
-    RESOURCER:     "Resourcer curating visual assets…",
-    "IMAGE-GEN":   "Image-gen crafting Puter.js prompts & injecting loader…",
+    ARCHITECT: "Architect analyzing — planning build…",
+    "SNR-DEV": "Senior Developer splitting work across files…",
+    "JNR-DEV": "Junior Developer applying targeted edit…",
+    UIUX: "UI/UX Designer applying visual changes…",
+    QA: "Site-tester running validation…",
+    CANVAS: "Opening visual / spatial editor…",
+    PREVIEW: "Launching preview server…",
+    MEMORY: "Writing to agent memory…",
+    GUARDRAILS: "Guardrails checking operation…",
+    RESEARCH: "Research agent searching…",
+    RESOURCER: "Resourcer curating visual assets…",
+    "IMAGE-GEN": "Image-gen crafting Puter.js prompts & injecting loader…",
   };
   return map[role] ?? "Working…";
 }
@@ -1628,7 +1655,7 @@ async function callGroq(systemPrompt, userMessage, maxTokens = 1200, temperature
           temperature,
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user",   content: userMessage   },
+            { role: "user", content: userMessage },
           ],
         }),
       });
@@ -1661,6 +1688,19 @@ async function callGroq(systemPrompt, userMessage, maxTokens = 1200, temperature
   throw lastErr ?? new Error("All Groq keys exhausted");
 }
 
+// ── WEBSITE-BUILDER AGENT LOADER ──────────────────────────────────────────────
+// Reads SYSTEM.md from agents/website-builder/<name>/ so prompts live in files,
+// not hardcoded strings. Edit the .md files to tune agent behaviour.
+const WB_AGENTS_DIR = path.join(__dirname, "agents", "website-builder");
+
+function loadAgentSystem(agentName) {
+  const systemPath = path.join(WB_AGENTS_DIR, agentName, "SYSTEM.md");
+  if (!existsSync(systemPath)) {
+    throw new Error(`[agent-loader] SYSTEM.md not found for agent: ${agentName} (expected at ${systemPath})`);
+  }
+  return readFileSync(systemPath, "utf-8").trim();
+}
+
 // ── RESEARCH AGENT — discovers what this type of website needs ─────────────────
 // Returns JSON: { siteType, aesthetic, keyFeatures[], targetAudience,
 //                 designInspiration, variants:{navbar,hero,cards,features,cta,footer},
@@ -1668,43 +1708,15 @@ async function callGroq(systemPrompt, userMessage, maxTokens = 1200, temperature
 async function runResearchAgent(userPrompt) {
   logHandoff("ORCHESTRATOR", "RESEARCH", "discovering design DNA for request");
   emitRoleBanner("RESEARCH");
-  const SYSTEM = `You are a senior web design researcher. Given a website request, return ONLY valid JSON (no markdown) with this exact shape:
-{
-  "siteType": "e-commerce|portfolio|landing|saas|blog|agency|restaurant|...",
-  "aesthetic": "one sentence describing the visual mood and style",
-  "keyFeatures": ["feature 1", "feature 2", "feature 3"],
-  "targetAudience": "who will use this site",
-  "designInspiration": "3 real brands/sites that do this well",
-  "imageKeywords": ["keyword1", "keyword2", "keyword3"],
-  "variants": {
-    "navbar": 0,
-    "hero": 0,
-    "cards": 0,
-    "features": 0,
-    "cta": 0,
-    "footer": 0
-  },
-  "colorPalette": { "primary": "#hex", "secondary": "#hex", "bg": "#hex", "text": "#hex" },
-  "fontDisplay": "'FontName', fallback-family"
-}
+  const SYSTEM = loadAgentSystem("research-agent");
 
-VARIANT INDEX GUIDE — pick the best fit for the site type:
-navbar:   0=Classic(logo-left)  1=Centered(logo-middle)  2=Animated(typewriter)  3=GlassCTA(with button)  4=Minimal(hamburger drawer)
-hero:     0=Cinematic(fullbleed) 1=Split(text+image side) 2=BoldType(huge text)  3=Magazine(editorial)     4=Asymmetric(dramatic)
-cards:    0=Grid(3col)   1=Carousel(horizontal)  2=Featured(1big+smalls)  3=Masonry(staggered)  4=List(alternating rows)
-features: 0=IconGrid  1=Numbered  2=Alternating(left/right)  3=Timeline  4=StatCards(horizontal scroll)
-cta:      0=Fullbleed(image bg)  1=Split(text+image)  2=Minimal(border accent)  3=GlassCard(frosted)  4=HorizBar(banner strip)
-footer:   0=TwoCol  1=Centered  2=Minimal(one line)  3=BigBrand(watermark text)  4=DarkCard(raised card)
-
-Choose variants that match the industry and vibe. E.g. e-commerce → navbar:3(CTA button), hero:1(product split), cards:0(product grid)`;
-
-  const text = await callGroq(SYSTEM, `Website request: ${userPrompt}`, 1000, 0.6);
+  const text = await callGroq(SYSTEM, `Website request: ${ userPrompt } `, 1000, 0.6);
   try {
     const research = JSON.parse(text);
-    logEvent("RESEARCH", `Site type: ${research.siteType} | Variants: navbar=${research.variants?.navbar} hero=${research.variants?.hero} cards=${research.variants?.cards}`, "", C.cyan);
+    logEvent("RESEARCH", `Site type: ${ research.siteType } | Variants: navbar = ${ research.variants?.navbar } hero = ${ research.variants?.hero } cards = ${ research.variants?.cards } `, "", C.cyan);
     return research;
-  } catch {
-    logEvent("RESEARCH", "JSON parse failed — using defaults", "", C.red);
+  } catch (err) {
+    logEvent("RESEARCH", `JSON parse failed. Raw: ${text.slice(0, 100).replace(/\\n/g, ' ')}...`, "", C.red);
     return { siteType: "landing", variants: { navbar: 0, hero: 0, cards: 0, features: 0, cta: 0, footer: 0 }, colorPalette: {}, fontDisplay: "'Inter', sans-serif", imageKeywords: [] };
   }
 }
@@ -1716,22 +1728,15 @@ async function runResourcerAgent(research, userPrompt) {
   emitRoleBanner("RESOURCER");
   const aesthetic = research.aesthetic ?? "";
   const keywords  = (research.imageKeywords ?? []).join(", ");
-  const SYSTEM = `You are a visual art director. Given site research, output ONLY valid JSON:
-{
-  "imageTheme": "3-5 keyword Pollinations prompt base (e.g. 'luxury spa cinematic warm gold')",
-  "heroSeed": 12345,
-  "cardSeeds": [11111, 22222, 33333],
-  "ctaSeed": 44444,
-  "fontDisplay": "'FontName', fallback"
-}
-Seeds must be random 5-digit numbers. Image theme must be evocative and visual.`;
-  const text = await callGroq(SYSTEM, `Site: ${userPrompt}\nAesthetic: ${aesthetic}\nKeywords: ${keywords}`, 400, 0.8);
+  const SYSTEM = loadAgentSystem("resourcer-agent");
+  const text = await callGroq(SYSTEM, `Site: ${ userPrompt } \nAesthetic: ${ aesthetic } \nKeywords: ${ keywords } `, 400, 0.8);
   try {
     const res = JSON.parse(text);
-    logEvent("RESOURCER", `Image theme: "${res.imageTheme}" | Seeds: ${res.heroSeed}, ${res.cardSeeds?.join(",")}`, "", C.cyan);
+    logEvent("RESOURCER", `Image theme: "${res.imageTheme}" | Seeds: ${ res.heroSeed }, ${ res.cardSeeds?.join(",") } `, "", C.cyan);
     return res;
-  } catch {
-    return { imageTheme: userPrompt.toLowerCase().replace(/\s+/g, "+"), heroSeed: 73421, cardSeeds: [11111,22222,33333], ctaSeed: 55555, fontDisplay: "'Inter', sans-serif" };
+  } catch (err) {
+    logEvent("RESOURCER", `JSON parse failed. Raw: ${text.slice(0, 100).replace(/\\n/g, ' ')}...`, "", C.red);
+    return { imageTheme: userPrompt.toLowerCase().replace(/\\s+/g, "+"), heroSeed: 73421, cardSeeds: [11111,22222,33333], ctaSeed: 55555, fontDisplay: "'Inter', sans-serif" };
   }
 }
 
@@ -1740,42 +1745,107 @@ async function runUIUXAgent(research, resources, userPrompt) {
   logHandoff("RESOURCER", "UIUX", "designing content + copy for each section");
   emitRoleBanner("UIUX");
   const theme = resources.imageTheme ?? userPrompt;
-  const SYSTEM = `You are a senior UI/UX designer and copywriter. Output ONLY valid JSON:
-{
-  "brand": "site name",
-  "tagline": "short tagline for footer",
-  "navLinks": [{"label":"Home","href":"/"},{"label":"...","href":"/..."}],
-  "heroHeadline": "punchy hero headline (max 8 words)",
-  "heroSubtext": "compelling subtext 1-2 sentences",
-  "heroCTA1": "primary button text",
-  "heroCTA2": "secondary button text",
-  "cards": [
-    {"title":"...","desc":"one sentence"},
-    {"title":"...","desc":"one sentence"},
-    {"title":"...","desc":"one sentence"}
-  ],
-  "featureSectionTitle": "...",
-  "features": [
-    {"icon":"emoji","title":"...","desc":"one sentence"},
-    {"icon":"emoji","title":"...","desc":"one sentence"},
-    {"icon":"emoji","title":"...","desc":"one sentence"},
-    {"icon":"emoji","title":"...","desc":"one sentence"}
-  ],
-  "ctaHeadline": "strong CTA headline",
-  "ctaBody": "supporting CTA text",
-  "ctaButton": "CTA button text",
-  "footerLinks": [{"label":"About","href":"/about"},{"label":"Contact","href":"/contact"},{"label":"FAQ","href":"/faq"}]
-}
-All copy must be themed to the user's request. Be specific, not generic.`;
+  const SYSTEM = loadAgentSystem("uiux-agent");
   const text = await callGroq(SYSTEM, `Design brief:\n- Site: ${userPrompt}\n- Style: ${research.aesthetic}\n- Audience: ${research.targetAudience}\n- Inspiration: ${research.designInspiration}`, 1400, 0.75);
   try {
     const ux = JSON.parse(text);
     logEvent("UIUX", `Brand: "${ux.brand}" | Headline: "${ux.heroHeadline}"`, "", C.magenta);
     return ux;
-  } catch {
-    logEvent("UIUX", "JSON parse failed — falling back to basic copy", "", C.red);
+  } catch (err) {
+    logEvent("UIUX", `JSON parse failed. Raw: ${text.slice(0, 100).replace(/\\n/g, ' ')}...`, "", C.red);
     return null;
   }
+}
+
+// ── GEMINI IMAGE GENERATION ────────────────────────────────────────────────────
+const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
+
+async function generateWithGemini(prompt, width, height) {
+  if (!GEMINI_KEY) return null;
+  const aspectRatio = width >= 1400 ? "16:9" : width >= 800 ? "4:3" : "1:1";
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${GEMINI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: { sampleCount: 1, aspectRatio },
+        }),
+        signal: AbortSignal.timeout(25000),
+      }
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const b64 = data.predictions?.[0]?.bytesBase64Encoded;
+    return b64 ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function downloadFromPollinations(prompt, width, height) {
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&nologo=true&model=turbo`;
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    if (!resp.ok) return null;
+    const buf = await resp.arrayBuffer();
+    return { buffer: Buffer.from(buf), url };
+  } catch {
+    return null;
+  }
+}
+
+// Pre-generates all site images server-side BEFORE launching the browser.
+// Tries: Gemini Imagen → Pollinations download → Pollinations URL fallback
+// Returns a map: { hero, "card-0", "card-1", "card-2", cta } → public path or URL
+async function prefetchImages(heroPrompt, cardPrompts, ctaPrompt, publicDir) {
+  const imgDir = path.join(publicDir, "images");
+  mkdirSync(imgDir, { recursive: true });
+
+  const zones = [
+    { name: "hero", prompt: heroPrompt, w: 1600, h: 900 },
+    { name: "card-0", prompt: cardPrompts[0] ?? "", w: 400, h: 300 },
+    { name: "card-1", prompt: cardPrompts[1] ?? "", w: 400, h: 300 },
+    { name: "card-2", prompt: cardPrompts[2] ?? "", w: 400, h: 300 },
+    { name: "cta", prompt: ctaPrompt, w: 1200, h: 400 },
+  ];
+
+  const results = {};
+
+  for (const zone of zones) {
+    if (!zone.prompt) { results[zone.name] = null; continue; }
+    const filePath = path.join(imgDir, `${zone.name}.jpg`);
+    const publicPath = `/images/${zone.name}.jpg`;
+    const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(zone.prompt)}?width=${zone.w}&height=${zone.h}&nologo=true&model=turbo`;
+
+    // ── Try Gemini first ──
+    logEvent("IMAGE-GEN", `Gemini  ⟶  ${zone.name}: "${zone.prompt.slice(0, 60)}"`, "", C.magenta);
+    const b64 = await generateWithGemini(zone.prompt, zone.w, zone.h);
+    if (b64) {
+      writeFileSync(filePath, Buffer.from(b64, "base64"));
+      logEvent("IMAGE-GEN", `✅ Gemini saved  →  ${publicPath}`, "", C.magenta);
+      results[zone.name] = publicPath;
+      continue;
+    }
+
+    // ── Fallback: download from Pollinations ──
+    logEvent("IMAGE-GEN", `Pollinations  ⟶  ${zone.name} (Gemini unavailable)`, "", C.magenta);
+    const polResult = await downloadFromPollinations(zone.prompt, zone.w, zone.h);
+    if (polResult) {
+      writeFileSync(filePath, polResult.buffer);
+      logEvent("IMAGE-GEN", `✅ Pollinations saved  →  ${publicPath}`, "", C.magenta);
+      results[zone.name] = publicPath;
+      continue;
+    }
+
+    // ── Last resort: use Pollinations URL directly (no download) ──
+    logEvent("IMAGE-GEN", `⚠️  Using URL directly for ${zone.name}`, "", C.red);
+    results[zone.name] = polUrl;
+  }
+
+  return results;
 }
 
 // ── IMAGE-GEN AGENT — crafts Puter.js txt2img prompts based on architect brief ──
@@ -1785,21 +1855,14 @@ async function runImageGenAgent(research, resources, ux, userPrompt) {
   logHandoff("UIUX", "IMAGE-GEN", "crafting Puter.js AI image prompts from architect brief");
   emitRoleBanner("IMAGE-GEN");
 
-  const aesthetic  = research.aesthetic  ?? "cinematic, dramatic";
-  const siteType   = research.siteType   ?? "website";
-  const theme      = resources.imageTheme ?? userPrompt;
-  const brand      = ux?.brand ?? userPrompt;
-  const headline   = ux?.heroHeadline ?? "";
-  const cards      = ux?.cards ?? [];
+  const aesthetic = research.aesthetic ?? "cinematic, dramatic";
+  const siteType = research.siteType ?? "website";
+  const theme = resources.imageTheme ?? userPrompt;
+  const brand = ux?.brand ?? userPrompt;
+  const headline = ux?.heroHeadline ?? "";
+  const cards = ux?.cards ?? [];
 
-  const SYSTEM = `You are an AI image prompt engineer. Given a website design brief, output ONLY this exact JSON structure. No markdown, no extra text:
-{"heroPrompt":"PROMPT_HERE","cardPrompts":["CARD1","CARD2","CARD3"],"ctaPrompt":"CTA_HERE"}
-Rules for prompt values:
-- Keep each prompt under 100 characters
-- No quotes, apostrophes, backslashes, or special chars inside prompts (they break JSON)
-- Use only ASCII letters, numbers, commas, spaces, and hyphens in prompt text
-- Include: art style, mood, lighting, color keywords
-- Never name real people or copyrighted characters`;
+  const SYSTEM = loadAgentSystem("image-gen-agent");
 
   const brief = `Brand: ${brand} | Type: ${siteType} | Aesthetic: ${aesthetic} | Theme: ${theme} | Cards: ${cards.map(c => c.title).join(', ')}`;
 
@@ -1812,8 +1875,8 @@ Rules for prompt values:
       parsed = JSON.parse(raw);
     } catch {
       // Try to extract values even from malformed JSON using regex
-      const heroM  = raw.match(/"heroPrompt"\s*:\s*"([^"]{5,200})"/);
-      const ctaM   = raw.match(/"ctaPrompt"\s*:\s*"([^"]{5,200})"/);
+      const heroM = raw.match(/"heroPrompt"\s*:\s*"([^"]{5,200})"/);
+      const ctaM = raw.match(/"ctaPrompt"\s*:\s*"([^"]{5,200})"/);
       const cardsM = [...raw.matchAll(/"([^"]{5,150})"/g)]
         .map(m => m[1])
         .filter(s => s !== 'heroPrompt' && s !== 'ctaPrompt' && s !== 'cardPrompts' && s.length > 10)
@@ -1832,16 +1895,16 @@ Rules for prompt values:
     logEvent("IMAGE-GEN", `Prompt generation failed (${e.message}) — using theme fallback`, "", C.red);
     const base = theme.replace(/[^a-zA-Z0-9 ,\-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
     prompts = {
-      heroPrompt:   `${base} - cinematic hero wide shot - dramatic lighting - ultra detailed`,
-      cardPrompts:  [`${base} - scene one - photorealistic`, `${base} - scene two - cinematic`, `${base} - scene three - artistic`],
-      ctaPrompt:    `${base} - wide panoramic banner - dramatic sky - cinematic color grade`,
+      heroPrompt: `${base} - cinematic hero wide shot - dramatic lighting - ultra detailed`,
+      cardPrompts: [`${base} - scene one - photorealistic`, `${base} - scene two - cinematic`, `${base} - scene three - artistic`],
+      ctaPrompt: `${base} - wide panoramic banner - dramatic sky - cinematic color grade`,
     };
   }
 
   return {
-    heroPrompt:  prompts.heroPrompt  ?? "",
+    heroPrompt: prompts.heroPrompt ?? "",
     cardPrompts: prompts.cardPrompts ?? [],
-    ctaPrompt:   prompts.ctaPrompt   ?? "",
+    ctaPrompt: prompts.ctaPrompt ?? "",
   };
 }
 
@@ -1867,39 +1930,45 @@ async function buildWebsiteDirect(prompt) {
   logEvent("ARCHITECT", `Planning: "${prompt.slice(0, 60)}"`, "", C.yellow);
 
   const siteContentPath = path.join(GENERATED_SITE, "src", "app", "site-content.ts");
-  const cssPath         = path.join(GENERATED_SITE, "src", "app", "globals.css");
-  const variantsPath    = path.join(GENERATED_SITE, "src", "app", "design-variants.json");
-  const variantsTsPath  = path.join(GENERATED_SITE, "src", "app", "design-variants.ts");
+  const cssPath = path.join(GENERATED_SITE, "src", "app", "globals.css");
+  const variantsPath = path.join(GENERATED_SITE, "src", "app", "design-variants.json");
+  const variantsTsPath = path.join(GENERATED_SITE, "src", "app", "design-variants.ts");
 
   // ── Stage 1: RESEARCH ─────────────────────────────────────────────────────
   const research = await runResearchAgent(prompt);
-  const v = research.variants ?? { navbar:0, hero:0, cards:0, features:0, cta:0, footer:0 };
+  const v = research.variants ?? { navbar: 0, hero: 0, cards: 0, features: 0, cta: 0, footer: 0 };
 
   // ── Stage 2: RESOURCER ────────────────────────────────────────────────────
   const resources = await runResourcerAgent(research, prompt);
-  const imgTheme  = (resources.imageTheme ?? prompt.toLowerCase()).replace(/\s+/g, "+");
-  const heroSeed  = resources.heroSeed  ?? 73421;
-  const [cs1,cs2,cs3] = resources.cardSeeds ?? [11111,22222,33333];
-  const ctaSeed   = resources.ctaSeed   ?? 55555;
+  const imgTheme = (resources.imageTheme ?? prompt.toLowerCase()).replace(/\s+/g, "+");
+  const heroSeed = resources.heroSeed ?? 73421;
+  const [cs1, cs2, cs3] = resources.cardSeeds ?? [11111, 22222, 33333];
+  const ctaSeed = resources.ctaSeed ?? 55555;
 
   // ── Stage 3: UIUX ─────────────────────────────────────────────────────────
   const ux = await runUIUXAgent(research, resources, prompt);
 
-  // ── Stage 3.5: IMAGE-GEN — Puter.js prompt engineering ───────────────────
+  // ── Stage 3.5: IMAGE-GEN — prompt engineering ────────────────────────────
   const imageGenResult = await runImageGenAgent(research, resources, ux, prompt);
   const { heroPrompt, cardPrompts, ctaPrompt } = imageGenResult;
 
-  // Write puter-image-config.js to generated-site/public/ so the browser can load it
+  // Write puter-image-config.js (kept for client-side fallback reference)
   const publicDir = path.join(GENERATED_SITE, "public");
   mkdirSync(publicDir, { recursive: true });
   const puterConfigPath = path.join(publicDir, "puter-image-config.js");
   const puterConfigContent = `// Auto-generated by IMAGE-GEN agent — do not edit\nwindow.__puterImageConfig = ${JSON.stringify({
-    hero:  heroPrompt,
+    hero: heroPrompt,
     cards: cardPrompts,
-    cta:   ctaPrompt,
+    cta: ctaPrompt,
   }, null, 2)};\n`;
   writeFileSync(puterConfigPath, puterConfigContent, "utf-8");
-  logEvent("IMAGE-GEN", `puter-image-config.js → public/ (${(puterConfigContent.length / 1024).toFixed(1)}KB)`, "", C.magenta);
+  logEvent("IMAGE-GEN", `puter-image-config.js written`, "", C.magenta);
+
+  // ── Stage 3.6: Pre-fetch all images server-side (Gemini → Pollinations) ──
+  logHandoff("IMAGE-GEN", "IMAGE-GEN", "pre-fetching images server-side before launch");
+  logEvent("IMAGE-GEN", "Pre-generating images: Gemini → Pollinations → URL fallback", "", C.magenta);
+  const imgPaths = await prefetchImages(heroPrompt, cardPrompts, ctaPrompt, publicDir);
+  logEvent("IMAGE-GEN", `Images ready: ${Object.values(imgPaths).filter(Boolean).length}/5 zones`, "", C.magenta);
 
   // Write PuterImageLoader.tsx to the components directory
   const puterLoaderPath = path.join(GENERATED_SITE, "src", "components", "PuterImageLoader.tsx");
@@ -1912,10 +1981,16 @@ type PuterConfig = {
   cta:   string;
 };
 
+const BASE = 'https://image.pollinations.ai/prompt/';
+
+function pollinationsUrl(prompt: string, width: number, height: number): string {
+  return \`\${BASE}\${encodeURIComponent(prompt)}?width=\${width}&height=\${height}&nologo=true&model=turbo\`;
+}
+
 const LOG_LIMIT = 20;
 
 export default function PuterImageLoader() {
-  const [logs, setLogs]       = useState<string[]>(['[IMAGE-GEN] 🎨 Initialising Puter.js…']);
+  const [logs, setLogs]       = useState<string[]>(['[IMAGE-GEN] 🎨 Loading images via Pollinations.ai…']);
   const [done, setDone]       = useState(false);
   const [visible, setVisible] = useState(true);
 
@@ -1923,83 +1998,52 @@ export default function PuterImageLoader() {
     setLogs(prev => [...prev.slice(-(LOG_LIMIT - 1)), msg]);
 
   useEffect(() => {
-    // Load puter-image-config.js from public/ then puter.js SDK
     const cfgScript = document.createElement('script');
     cfgScript.src = '/puter-image-config.js';
-    cfgScript.onload = () => loadPuterSDK();
+    cfgScript.onload = () => applyImages();
     cfgScript.onerror = () => addLog('[IMAGE-GEN] ❌ Config load failed — check public/puter-image-config.js');
     document.head.appendChild(cfgScript);
-
     return () => { document.head.removeChild(cfgScript); };
   }, []);
 
-  function loadPuterSDK() {
-    if ((window as any).puter) { runGeneration(); return; }
-    addLog('[IMAGE-GEN] 📦 Loading Puter.js SDK…');
-    const s = document.createElement('script');
-    s.src = 'https://js.puter.com/v2/';
-    s.onload  = () => { addLog('[IMAGE-GEN] ✅ Puter.js ready'); runGeneration(); };
-    s.onerror = () => addLog('[IMAGE-GEN] ❌ Puter.js SDK failed to load — are you online?');
-    document.head.appendChild(s);
-  }
-
-  async function runGeneration() {
-    const puter = (window as any).puter;
-    const cfg   = (window as any).__puterImageConfig as PuterConfig | undefined;
-    if (!puter?.ai?.txt2img || !cfg) {
-      addLog('[IMAGE-GEN] ❌ Puter AI or config not available');
+  function applyImages() {
+    const cfg = (window as any).__puterImageConfig as PuterConfig | undefined;
+    if (!cfg) {
+      addLog('[IMAGE-GEN] ❌ Config not available');
       return;
     }
 
-    // ── Hero image ──────────────────────────────────────────────────────────
+    // ── Hero ────────────────────────────────────────────────────────────────────
     const heroEl = document.querySelector<HTMLImageElement>('img[data-puter-zone="hero"]');
     if (heroEl && cfg.hero) {
-      addLog('[IMAGE-GEN] 🎨 Generating hero image (may take 5–15s)…');
-      const t0 = Date.now();
-      try {
-        const img = await puter.ai.txt2img(cfg.hero);
-        heroEl.src = img.src;
-        addLog(\`[IMAGE-GEN] ✅ Hero ready (\${((Date.now()-t0)/1000).toFixed(1)}s)\`);
-      } catch (e: any) {
-        addLog(\`[IMAGE-GEN] ⚠️ Hero failed: \${e?.message ?? e}\`);
+      // Skip if already loaded from a local path (server pre-generated)
+      if (heroEl.src.includes('/images/')) { addLog('[IMAGE-GEN] ✅ Hero already pre-loaded'); }
+      else {
+        const url = pollinationsUrl(cfg.hero, 1600, 900);
+        if (heroEl.src !== url) heroEl.src = url;
+        addLog(\`[IMAGE-GEN] ✅ Hero  →  "\${cfg.hero}"\`);
       }
     }
 
-    // ── Card images ─────────────────────────────────────────────────────────
+    // ── Cards ───────────────────────────────────────────────────────────────────
     const cardEls = document.querySelectorAll<HTMLImageElement>('img[data-puter-zone^="card"]');
-    if (cardEls.length > 0 && cfg.cards?.length) {
-      addLog(\`[IMAGE-GEN] 🎨 Generating \${cardEls.length} card images…\`);
-      await Promise.all(Array.from(cardEls).map(async (el, i) => {
-        const cardPrompt = cfg.cards[i] ?? cfg.cards[0];
-        if (!cardPrompt) return;
-        const t0 = Date.now();
-        try {
-          const img = await puter.ai.txt2img(cardPrompt);
-          el.src = img.src;
-          addLog(\`[IMAGE-GEN] ✅ Card \${i + 1} ready (\${((Date.now()-t0)/1000).toFixed(1)}s)\`);
-        } catch (e: any) {
-          addLog(\`[IMAGE-GEN] ⚠️ Card \${i + 1} failed: \${e?.message ?? e}\`);
-        }
-      }));
-    }
+    Array.from(cardEls).forEach((el, i) => {
+      const prompt = cfg.cards[i] ?? cfg.cards[0];
+      if (!prompt) return;
+      el.src = pollinationsUrl(prompt, 400, 300);
+      addLog(\`[IMAGE-GEN] ✅ Card \${i + 1}  →  "\${prompt}"\`);
+    });
 
-    // ── CTA image ───────────────────────────────────────────────────────────
+    // ── CTA ─────────────────────────────────────────────────────────────────────
     const ctaEl = document.querySelector<HTMLImageElement>('img[data-puter-zone="cta"]');
     if (ctaEl && cfg.cta) {
-      addLog('[IMAGE-GEN] 🎨 Generating CTA banner…');
-      const t0 = Date.now();
-      try {
-        const img = await puter.ai.txt2img(cfg.cta);
-        ctaEl.src = img.src;
-        addLog(\`[IMAGE-GEN] ✅ CTA ready (\${((Date.now()-t0)/1000).toFixed(1)}s)\`);
-      } catch (e: any) {
-        addLog(\`[IMAGE-GEN] ⚠️ CTA failed: \${e?.message ?? e}\`);
-      }
+      ctaEl.src = pollinationsUrl(cfg.cta, 1200, 400);
+      addLog(\`[IMAGE-GEN] ✅ CTA  →  "\${cfg.cta}"\`);
     }
 
-    addLog('[IMAGE-GEN] 🏁 All Puter.js images complete');
+    addLog('[IMAGE-GEN] 🏁 All images live via Pollinations.ai');
     setDone(true);
-    setTimeout(() => setVisible(false), 6000);
+    setTimeout(() => setVisible(false), 5000);
   }
 
   if (!visible) return null;
@@ -2008,29 +2052,29 @@ export default function PuterImageLoader() {
     <div
       data-puter-log
       style={{
-        position:        'fixed',
-        bottom:          '1.5rem',
-        left:            '1.5rem',
-        zIndex:          9997,
-        fontFamily:      'ui-monospace, monospace',
-        fontSize:        '0.68rem',
-        lineHeight:      1.55,
-        maxWidth:        '26rem',
-        maxHeight:       '14rem',
-        overflowY:       'auto',
-        background:      'rgba(3,3,14,0.92)',
-        border:          '1px solid rgba(167,139,250,0.35)',
-        borderRadius:    '0.6rem',
-        backdropFilter:  'blur(18px)',
-        padding:         '0.65rem 0.8rem',
-        color:           '#c4b5fd',
-        boxShadow:       '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(167,139,250,0.08)',
-        transition:      'opacity 0.4s ease',
-        opacity:         done ? 0.5 : 1,
+        position:       'fixed',
+        bottom:         '1.5rem',
+        left:           '1.5rem',
+        zIndex:         9997,
+        fontFamily:     'ui-monospace, monospace',
+        fontSize:       '0.68rem',
+        lineHeight:     1.55,
+        maxWidth:       '28rem',
+        maxHeight:      '14rem',
+        overflowY:      'auto',
+        background:     'rgba(3,3,14,0.92)',
+        border:         '1px solid rgba(167,139,250,0.35)',
+        borderRadius:   '0.6rem',
+        backdropFilter: 'blur(18px)',
+        padding:        '0.65rem 0.8rem',
+        color:          '#c4b5fd',
+        boxShadow:      '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(167,139,250,0.08)',
+        transition:     'opacity 0.4s ease',
+        opacity:        done ? 0.5 : 1,
       }}
     >
       <div style={{ fontWeight: 700, color: '#a78bfa', marginBottom: '0.35rem', letterSpacing: '0.04em' }}>
-        🎨 IMAGE-GEN · Puter.js
+        🖼 IMAGE-GEN · Pollinations.ai
       </div>
       {logs.map((l, i) => (
         <div key={i} style={{ opacity: i === logs.length - 1 ? 1 : 0.65 }}>{l}</div>
@@ -2057,16 +2101,16 @@ export default function PuterImageLoader() {
   // Build SITE object from UIUX output (or fall back to Groq-generated content)
   let siteContent;
   if (ux) {
-    const navLinks  = (ux.navLinks  ?? [{label:"Home",href:"/"},{label:"About",href:"/about"},{label:"Contact",href:"/contact"}])
+    const navLinks = (ux.navLinks ?? [{ label: "Home", href: "/" }, { label: "About", href: "/about" }, { label: "Contact", href: "/contact" }])
       .map(l => `{label:"${l.label}",href:"${l.href}"}`)
       .join(", ");
-    const cards = (ux.cards ?? []).map((c,i) =>
-      `{title:"${c.title}",desc:"${c.desc}",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card${i>0?i+1:""}?width=400&height=300&nologo=true&seed=${[cs1,cs2,cs3][i]??Math.floor(Math.random()*90000)+10000}",pzCard:${i}}`
+    const cards = (ux.cards ?? []).map((c, i) =>
+      `{title:"${c.title}",desc:"${c.desc}",imageUrl:"${imgPaths[`card-${i}`] ?? `https://image.pollinations.ai/prompt/${encodeURIComponent(cardPrompts[i] ?? '')}?width=400&height=300&nologo=true&model=turbo`}",pzCard:${i}}`
     ).join(",\n    ");
     const features = (ux.features ?? []).map(f =>
       `{icon:"${f.icon}",title:"${f.title}",desc:"${f.desc}"}`
     ).join(",\n      ");
-    const footerLinks = (ux.footerLinks ?? [{label:"About",href:"/about"},{label:"Contact",href:"/contact"}])
+    const footerLinks = (ux.footerLinks ?? [{ label: "About", href: "/about" }, { label: "Contact", href: "/contact" }])
       .map(l => `{label:"${l.label}",href:"${l.href}"}`)
       .join(", ");
 
@@ -2077,7 +2121,7 @@ export default function PuterImageLoader() {
     subtext: "${ux.heroSubtext ?? ""}",
     cta1: "${ux.heroCTA1 ?? "Get Started"}",
     cta2: "${ux.heroCTA2 ?? "Learn More"}",
-    imageUrl: "https://image.pollinations.ai/prompt/${imgTheme}+cinematic?width=1600&height=900&nologo=true&seed=${heroSeed}",
+    imageUrl: "${imgPaths['hero'] ?? `https://image.pollinations.ai/prompt/${encodeURIComponent(heroPrompt)}?width=1600&height=900&nologo=true&model=turbo`}",
   },
   cards: [
     ${cards}
@@ -2092,7 +2136,7 @@ export default function PuterImageLoader() {
     headline: "${ux.ctaHeadline ?? "Get Started"}",
     body: "${ux.ctaBody ?? ""}",
     button: "${ux.ctaButton ?? "Start Now"}",
-    imageUrl: "https://image.pollinations.ai/prompt/${imgTheme}+wide+banner?width=1200&height=400&nologo=true&seed=${ctaSeed}",
+    imageUrl: "${imgPaths['cta'] ?? `https://image.pollinations.ai/prompt/${encodeURIComponent(ctaPrompt)}?width=1200&height=400&nologo=true&model=turbo`}",
   },
   footer: {
     brand: "${ux.brand ?? "My Site"}",
@@ -2107,19 +2151,19 @@ export default function PuterImageLoader() {
   // cta:    0=Fullbleed 1=Split 2=Minimal 3=GlassCard 4=HorizBar
   // footer: 0=TwoCol 1=Centered 2=Minimal 3=BigBrand 4=DarkCard
   variants: {
-    navbar:   ${v.navbar   ?? 0},
-    hero:     ${v.hero     ?? 0},
-    cards:    ${v.cards    ?? 0},
+    navbar:   ${v.navbar ?? 0},
+    hero:     ${v.hero ?? 0},
+    cards:    ${v.cards ?? 0},
     features: ${v.features ?? 0},
-    cta:      ${v.cta      ?? 0},
-    footer:   ${v.footer   ?? 0},
+    cta:      ${v.cta ?? 0},
+    footer:   ${v.footer ?? 0},
   },
 };`;
   } else {
     // UIUX failed — fall back to a single Groq call for content
     logEvent("SNR-DEV", "UIUX failed — generating content directly", "", C.red);
     const fallbackText = await callGroq(
-      `Output ONLY valid TypeScript (no markdown). Generate: export const SITE = { navbar:{brand:"...",links:[{label:"...",href:"/..."}]}, hero:{headline:"...",subtext:"...",cta1:"...",cta2:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+cinematic?width=1600&height=900&nologo=true&seed=${heroSeed}"}, cards:[{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card?width=400&height=300&nologo=true&seed=${cs1}"},{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card2?width=400&height=300&nologo=true&seed=${cs2}"},{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card3?width=400&height=300&nologo=true&seed=${cs3}"}], features:{sectionTitle:"...",items:[{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."}]}, cta:{headline:"...",body:"...",button:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+wide?width=1200&height=400&nologo=true&seed=${ctaSeed}"}, footer:{brand:"...",tagline:"...",links:[{label:"About",href:"/about"},{label:"Contact",href:"/contact"}]}, variants:{navbar:${v.navbar??0},hero:${v.hero??0},cards:${v.cards??0},features:${v.features??0},cta:${v.cta??0},footer:${v.footer??0}}, };`,
+      `Output ONLY valid TypeScript (no markdown). Generate: export const SITE = { navbar:{brand:"...",links:[{label:"...",href:"/..."}]}, hero:{headline:"...",subtext:"...",cta1:"...",cta2:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+cinematic?width=1600&height=900&nologo=true&model=turbo&seed=${heroSeed}"}, cards:[{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card?width=400&height=300&nologo=true&model=turbo&seed=${cs1}"},{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card2?width=400&height=300&nologo=true&model=turbo&seed=${cs2}"},{title:"...",desc:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+card3?width=400&height=300&nologo=true&model=turbo&seed=${cs3}"}], features:{sectionTitle:"...",items:[{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."},{icon:"emoji",title:"...",desc:"..."}]}, cta:{headline:"...",body:"...",button:"...",imageUrl:"https://image.pollinations.ai/prompt/${imgTheme}+wide?width=1200&height=400&nologo=true&model=turbo&seed=${ctaSeed}"}, footer:{brand:"...",tagline:"...",links:[{label:"About",href:"/about"},{label:"Contact",href:"/contact"}]}, variants:{navbar:${v.navbar ?? 0},hero:${v.hero ?? 0},cards:${v.cards ?? 0},features:${v.features ?? 0},cta:${v.cta ?? 0},footer:${v.footer ?? 0}}, };`,
       `Theme: ${prompt}`,
       2000, 0.7
     );
@@ -2132,12 +2176,24 @@ export default function PuterImageLoader() {
   // ── Stage 4b: CSS :root from research palette ─────────────────────────────
   logHandoff("SNR-DEV", "SNR-DEV", "writing globals.css :root");
   const p = research.colorPalette ?? {};
-  const primary   = p.primary   ?? "#0d0d2b";
-  const secondary = p.secondary ?? "#a78bfa";
-  const bg        = p.bg        ?? "#030712";
-  const text      = p.text      ?? "#e2e8f0";
+  const primary   = p.primary   ?? "#1a0a00";   // dark warm, not blue
+  const secondary = p.secondary ?? "#c9843a";   // warm amber, not blue/purple
+  const bg        = p.bg        ?? "#0a0805";
+  const text      = p.text      ?? "#f0e8d8";
   const font      = resources.fontDisplay ?? research.fontDisplay ?? "'Inter', sans-serif";
-  const rootBlock = `:root {\n  --color-primary: ${primary};\n  --color-secondary: ${secondary};\n  --color-bg: ${bg};\n  --color-text: ${text};\n  --font-display: ${font};\n}`;
+
+  // Compute contrast text colors so buttons always stay readable regardless of theme
+  function luminance(hex) {
+    const c = hex.replace(/^#/, "");
+    const r = parseInt(c.slice(0,2)||"00", 16);
+    const g = parseInt(c.slice(2,4)||"00", 16);
+    const b = parseInt(c.slice(4,6)||"00", 16);
+    return (0.299*r + 0.587*g + 0.114*b) / 255;
+  }
+  const onPrimary   = luminance(primary)   > 0.45 ? "#000000" : "#ffffff";
+  const onSecondary = luminance(secondary) > 0.45 ? "#000000" : "#ffffff";
+
+  const rootBlock = `:root {\n  --color-primary: ${primary};\n  --color-secondary: ${secondary};\n  --color-bg: ${bg};\n  --color-text: ${text};\n  --color-on-primary: ${onPrimary};\n  --color-on-secondary: ${onSecondary};\n  --font-display: ${font};\n}`;
 
   // Full globals.css reset — replace :root in the canonical template.
   // This eliminates CSS residue (component-specific rules, old color overrides)
@@ -2252,9 +2308,9 @@ async function runAgent(prompt) {
   // qa_site added to fix/feature so site-tester can run post-write validation
   const tierTools = {
     architect: pick("file_read", "file_write", "search", "shell_exec", "qa_site", "launch_frontend", "append_memory"),
-    uiux:      pick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
-    snr:       pick("file_read", "file_write", "search", "qa_site", "append_memory"),
-    jnr:       pick("file_read", "file_write", "append_memory"),
+    uiux: pick("file_read", "file_write", "search", "qa_site", "launch_frontend", "append_memory"),
+    snr: pick("file_read", "file_write", "search", "qa_site", "append_memory"),
+    jnr: pick("file_read", "file_write", "append_memory"),
   };
   const activeTools = tierTools[tier] ?? tierTools.snr;
 
@@ -2340,7 +2396,7 @@ async function runAgent(prompt) {
 
         } else if (msg.toolName === "file_read") {
           process.stderr.write(
-            `${C.dim}[${new Date().toTimeString().slice(0,8)}] [${subRole.padEnd(12)}] ← file_read ${path.basename(msg.args?.path ?? "")}${C.reset}\n`
+            `${C.dim}[${new Date().toTimeString().slice(0, 8)}] [${subRole.padEnd(12)}] ← file_read ${path.basename(msg.args?.path ?? "")}${C.reset}\n`
           );
 
         } else if (msg.toolName === "shell_exec") {
@@ -2426,7 +2482,7 @@ async function repl() {
     if (line === null || line === undefined) break;
     const prompt = line.trim();
     if (!prompt) continue;
-    
+
     if (prompt.toLowerCase() === '/skills') {
       const skillsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "skills");
       if (existsSync(skillsDir)) {

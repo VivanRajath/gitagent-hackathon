@@ -141,7 +141,7 @@ function NavGlassCTA({ brand, links }: NavProps) {
       </ul>
       <button style={{
         padding:'0.5rem 1.35rem',borderRadius:'9999px',fontWeight:700,fontSize:'0.82rem',
-        background:'var(--color-secondary)',color:'#000',border:'none',cursor:'pointer',
+        background:'var(--color-secondary)',color:'var(--color-on-secondary)',border:'none',cursor:'pointer',
         fontFamily:'var(--font-display)',letterSpacing:'0.04em',flexShrink:0,
         boxShadow:'0 0 18px color-mix(in srgb,var(--color-secondary) 45%,transparent)',
       }}>

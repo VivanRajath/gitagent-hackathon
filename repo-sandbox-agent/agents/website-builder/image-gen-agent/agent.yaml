@@ -1,0 +1,26 @@
+name: image-gen-agent
+version: 1.0.0
+description: >
+  AI image prompt engineer for the website builder pipeline. Generates specific,
+  franchise-accurate prompts for hero, card, and CTA zones. Prompts are used by
+  Gemini Imagen and Pollinations.ai to produce server-side pre-fetched images.
+  Called after uiux-agent, before site-content.ts is assembled.
+
+model:
+  preferred: "groq:llama-3.3-70b-versatile"
+
+runtime:
+  max_tokens: 600
+  temperature: 0.65
+
+output: json
+
+image_services:
+  primary: gemini-imagen-3
+  fallback: pollinations-turbo
+  last_resort: pollinations-url
+
+tags:
+  - website-builder
+  - images
+  - prompts
