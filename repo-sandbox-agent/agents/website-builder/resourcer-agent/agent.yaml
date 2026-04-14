@@ -1,19 +1,20 @@
+spec_version: "0.1.0"
 name: resourcer-agent
 version: 1.0.0
 description: >
-  Visual art director. Curates image themes, seeds, and font choices for the site.
-  Called after research-agent. Returns imageTheme, seeds, and fontDisplay as JSON.
+  Visual art director. Curates image themes, deterministic seeds, and font choices
+  for the site. Called after research-agent. Returns imageTheme, per-zone seeds,
+  and fontDisplay as structured JSON.
 
 model:
   preferred: "groq:llama-3.3-70b-versatile"
 
-runtime:
-  max_tokens: 400
-  temperature: 0.8
-
-output: json
+skills:
+  - curate-resources
 
 tags:
   - website-builder
   - visual
   - images
+  - art-direction
+  - gitagent

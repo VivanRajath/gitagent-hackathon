@@ -2,20 +2,16 @@ spec_version: "0.1.0"
 name: image-gen-agent
 version: 1.0.0
 description: >
-  Generates AI images and CSS animations on-demand for website components.
-  Uses Pollinations.ai (free, no API key required) for photorealistic image
-  generation based on architect-provided prompts. Also produces CSS keyframe
-  animation strings (flicker, float, glitch, pulse, etc.) tailored to the
+  Creative visual synthesis agent for the website builder pipeline. Generates
+  cinematic, theme-accurate image prompts and outputs them across three services:
+  Gemini Imagen (primary), Pollinations.ai (fallback), and Puter.js txt2img
+  (client-side). Also produces bespoke CSS @keyframes animations tuned to the
   site's visual theme.
 
 model:
-  preferred: "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+  preferred: "groq:llama-3.3-70b-versatile"
   fallback:
-    - "groq:llama-3.3-70b-versatile"
-
-runtime:
-  max_turns: 15
-  timeout: 60
+    - "groq:meta-llama/llama-4-scout-17b-16e-instruct"
 
 skills:
   - generate-images
@@ -25,4 +21,6 @@ tags:
   - ai-images
   - animations
   - pollinations
+  - gemini
+  - puter
   - gitagent

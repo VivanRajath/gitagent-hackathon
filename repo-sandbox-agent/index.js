@@ -1689,16 +1689,60 @@ async function callGroq(systemPrompt, userMessage, maxTokens = 1200, temperature
 }
 
 // ── WEBSITE-BUILDER AGENT LOADER ──────────────────────────────────────────────
-// Reads SYSTEM.md from agents/website-builder/<name>/ so prompts live in files,
-// not hardcoded strings. Edit the .md files to tune agent behaviour.
+// Supports the gitagent standard: composes system prompt from SOUL.md + RULES.md
+// + skills/*/SKILL.md (stripping YAML frontmatter). Falls back to SYSTEM.md for
+// agents that haven't been migrated yet.
+// image-gen-agent lives at agents/image-gen-agent/ (not inside website-builder/).
 const WB_AGENTS_DIR = path.join(__dirname, "agents", "website-builder");
+const AGENTS_DIR    = path.join(__dirname, "agents");
+
+function _stripFrontmatter(text) {
+  // Remove YAML frontmatter block (--- ... ---) from SKILL.md files
+  return text.replace(/^---[\s\S]*?---\s*/m, "").trim();
+}
+
+function _loadGitagentSystem(agentDir) {
+  const soulPath  = path.join(agentDir, "SOUL.md");
+  const rulesPath = path.join(agentDir, "RULES.md");
+  const skillsDir = path.join(agentDir, "skills");
+
+  if (!existsSync(soulPath)) return null;
+
+  const parts = [readFileSync(soulPath, "utf-8").trim()];
+
+  if (existsSync(rulesPath)) {
+    parts.push(readFileSync(rulesPath, "utf-8").trim());
+  }
+
+  if (existsSync(skillsDir)) {
+    for (const skillName of readdirSync(skillsDir)) {
+      const skillMd = path.join(skillsDir, skillName, "SKILL.md");
+      if (existsSync(skillMd)) {
+        parts.push(_stripFrontmatter(readFileSync(skillMd, "utf-8")));
+      }
+    }
+  }
+
+  return parts.join("\n\n---\n\n");
+}
 
 function loadAgentSystem(agentName) {
-  const systemPath = path.join(WB_AGENTS_DIR, agentName, "SYSTEM.md");
-  if (!existsSync(systemPath)) {
-    throw new Error(`[agent-loader] SYSTEM.md not found for agent: ${agentName} (expected at ${systemPath})`);
+  // image-gen-agent lives outside website-builder/
+  const agentDir = agentName === "image-gen-agent"
+    ? path.join(AGENTS_DIR, "image-gen-agent")
+    : path.join(WB_AGENTS_DIR, agentName);
+
+  // Try gitagent standard first (SOUL.md + RULES.md + skills/)
+  const gitagent = _loadGitagentSystem(agentDir);
+  if (gitagent) return gitagent;
+
+  // Fall back to legacy SYSTEM.md
+  const systemPath = path.join(agentDir, "SYSTEM.md");
+  if (existsSync(systemPath)) {
+    return readFileSync(systemPath, "utf-8").trim();
   }
-  return readFileSync(systemPath, "utf-8").trim();
+
+  throw new Error(`[agent-loader] No system prompt found for agent: ${agentName} (checked ${agentDir} for SOUL.md and SYSTEM.md)`);
 }
 
 // ── RESEARCH AGENT — discovers what this type of website needs ─────────────────

@@ -1,0 +1,22 @@
+spec_version: "0.1.0"
+name: website-builder
+version: 1.0.0
+description: >
+  Orchestrator agent for AI-powered website generation. Coordinates a four-stage
+  pipeline: research-agent (design DNA) → resourcer-agent (visual art direction) →
+  uiux-agent (copy and layout) → image-gen-agent (AI images and animations).
+  Assembles all outputs into site-content.ts and puter-image-config.js.
+
+model:
+  preferred: "groq:llama-3.3-70b-versatile"
+  fallback:
+    - "groq:meta-llama/llama-4-scout-17b-16e-instruct"
+
+skills:
+  - build-website
+
+tags:
+  - website-builder
+  - orchestrator
+  - pipeline
+  - gitagent

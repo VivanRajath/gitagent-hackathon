@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --color-primary: #1a1d23;
-  --color-secondary: #ff9900;
+  --color-primary: #ff9900;
+  --color-secondary: #ffff00;
   --color-bg: #0a0a0a;
   --color-text: #ffffff;
-  --color-on-primary: #ffffff;
+  --color-on-primary: #000000;
   --color-on-secondary: #000000;
-  --font-display: 'Montserrat', sans-serif;
+  --font-display: 'Bangers', cursive;
 }
 
 *, *::before, *::after { box-sizing: border-box; }

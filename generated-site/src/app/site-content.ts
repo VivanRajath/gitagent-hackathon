@@ -1,36 +1,36 @@
 export const SITE = {
-  navbar: { brand: "Web-Slinger HQ", links: [{label:"Spider-Verse",href:"/"}, {label:"Villains",href:"/villains"}, {label:"Allies",href:"/allies"}, {label:"Gadgets",href:"/gadgets"}] },
+  navbar: { brand: "Ichiraku Ramen", links: [{label:"Home",href:"/"}, {label:"Ramen Menu",href:"/menu"}, {label:"Ninja Combos",href:"/combos"}, {label:"The Hidden Leaf",href:"/about"}, {label:"Contact Teuchi",href:"/contact"}] },
   hero: {
-    headline: "Protecting NYC",
-    subtext: "Join Spider-Man in his quest to defend the city from evil. Explore the dark alleys and towering skyscrapers of Manhattan, and uncover the secrets of your friendly neighborhood Spider-Man.",
-    cta1: "Explore the Spider-Verse",
-    cta2: "Join the Fight",
-    imageUrl: "/images/hero.jpg",
+    headline: "Slurp Down Victory!",
+    subtext: "Gather your team and fuel up with Ichiraku's legendary ramen, just like Naruto and his friends!",
+    cta1: "Order Now and Get a Free Ninja Scroll!",
+    cta2: "Explore Our Menu and Unleash Your Inner Ninja",
+    imageUrl: "https://image.pollinations.ai/prompt/Naruto%20Ichiraku%20Ramen%20Shop%20vibrant%20colorful%20anime%20-%20cinematic%20hero%20wide%20shot%20-%20dramatic%20lighting%20-%20ultra%20detailed?width=1600&height=900&nologo=true&model=turbo",
   },
   cards: [
-    {title:"The Daily Bugle",desc:"Uncover the latest news and scandals in NYC",imageUrl:"https://image.pollinations.ai/prompt/Daily%20Bugle%20newsroom?width=400&height=300&nologo=true&model=turbo",pzCard:0},
-    {title:"Spider-Man's Lair",desc:"Delve into the web-slinger's hidden headquarters",imageUrl:"https://image.pollinations.ai/prompt/Spiderman%20lair%20tech?width=400&height=300&nologo=true&model=turbo",pzCard:1},
-    {title:"Supervillains",desc:"Face off against the most notorious foes in the Marvel Universe",imageUrl:"https://image.pollinations.ai/prompt/Supervillains%20dark%20alley?width=400&height=300&nologo=true&model=turbo",pzCard:2}
+    {title:"Naruto's Favorite",desc:"Our signature miso ramen, inspired by the Seventh Hokage's favorite dish.",imageUrl:"https://image.pollinations.ai/prompt/Naruto%20Ichiraku%20Ramen%20Shop%20vibrant%20colorful%20anime%20-%20scene%20one%20-%20photorealistic?width=400&height=300&nologo=true&model=turbo",pzCard:0},
+    {title:"Sasuke's Spicy",desc:"A bold, spicy ramen for those who dare to take on the Uchiha challenge.",imageUrl:"https://image.pollinations.ai/prompt/Naruto%20Ichiraku%20Ramen%20Shop%20vibrant%20colorful%20anime%20-%20scene%20two%20-%20cinematic?width=400&height=300&nologo=true&model=turbo",pzCard:1},
+    {title:"Sakura's Delight",desc:"A gentle, soothing ramen for the kunoichi in you, with a hint of cherry blossom flavor.",imageUrl:"https://image.pollinations.ai/prompt/Naruto%20Ichiraku%20Ramen%20Shop%20vibrant%20colorful%20anime%20-%20scene%20three%20-%20artistic?width=400&height=300&nologo=true&model=turbo",pzCard:2}
   ],
   features: {
-    sectionTitle: "Spider-Man's Arsenal",
+    sectionTitle: "Ninja Training Fuel",
     items: [
-      {icon:"🕸️",title:"Web Shooters",desc:"Swing into action with Spider-Man's trusty web shooters"},
-      {icon:"🔍",title:"Superhuman Senses",desc:"Unleash your spider-sense to anticipate and react to danger"},
-      {icon:"💻",title:"Genius-Level Intellect",desc:"Outsmart your enemies with Spider-Man's quick wit and cunning"},
-      {icon:"👊",title:"Superhuman Strength",desc:"Unleash your inner strength to take down even the toughest foes"}
+      {icon:"🍜",title:"Ramen Variety",desc:"From classic tonkotsu to spicy miso, our ramen is crafted to fuel your ninja training."},
+      {icon:"🥋",title:"Ninja Combos",desc:"Pair your ramen with our special ninja combos, featuring gyoza, edamame, and more!"},
+      {icon:"🍴",title:"Ichiraku's Secret Sauce",desc:"Our secret sauce is made with love and a hint of ninja magic, adding an extra kick to your meal."},
+      {icon:"🎁",title:"Ninja Rewards",desc:"Collect stamps and earn rewards, just like Naruto earning his ninja stars!"}
     ],
   },
   cta: {
-    headline: "Unite with Spider-Man",
-    body: "Join the fight against evil and become a part of the Spider-Verse. Explore the latest comics, movies, and TV shows, and connect with fellow fans from around the world.",
-    button: "Join the Web-Heads",
-    imageUrl: "https://image.pollinations.ai/prompt/Swing%20into%20action?width=1200&height=400&nologo=true&model=turbo",
+    headline: "Unleash Your Ninja Spirit!",
+    body: "Join the Ichiraku Ramen community and stay up-to-date on new menu items, promotions, and ninja events!",
+    button: "Join the Ninja Squad",
+    imageUrl: "https://image.pollinations.ai/prompt/Naruto%20Ichiraku%20Ramen%20Shop%20vibrant%20colorful%20anime%20-%20wide%20panoramic%20banner%20-%20dramatic%20sky%20-%20cinematic%20color%20grade?width=1200&height=400&nologo=true&model=turbo",
   },
   footer: {
-    brand: "Web-Slinger HQ",
-    tagline: "Swinging into the Dark",
-    links: [{label:"About Spider-Man",href:"/about-spiderman"}, {label:"Spider-Man Comics",href:"/comics"}, {label:"Spider-Man Movies",href:"/movies"}, {label:"Spider-Man Games",href:"/games"}],
+    brand: "Ichiraku Ramen",
+    tagline: "Fuel for the Ninja Soul",
+    links: [{label:"About Ichiraku",href:"/about"}, {label:"Contact Us",href:"/contact"}, {label:"Ninja Blog",href:"/blog"}],
   },
   // Layout variant indices — set by UIUX agent based on site type
   // navbar: 0=Classic 1=Centered 2=Animated 3=GlassCTA 4=Minimal
@@ -40,11 +40,11 @@ export const SITE = {
   // cta:    0=Fullbleed 1=Split 2=Minimal 3=GlassCard 4=HorizBar
   // footer: 0=TwoCol 1=Centered 2=Minimal 3=BigBrand 4=DarkCard
   variants: {
-    navbar:   3,
-    hero:     0,
-    cards:    0,
-    features: 0,
-    cta:      0,
-    footer:   0,
+    navbar:   1,
+    hero:     3,
+    cards:    1,
+    features: 2,
+    cta:      1,
+    footer:   2,
   },
 };
