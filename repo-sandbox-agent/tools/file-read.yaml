@@ -8,5 +8,6 @@ input_schema:
       type: string
       description: Absolute or relative path to the file
 implementation:
-  path: tools/scripts/file-read.js
+  type: script
+  path: scripts/file-read.js
   runtime: node

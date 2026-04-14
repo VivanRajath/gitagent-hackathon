@@ -11,5 +11,6 @@ input_schema:
       type: string
       description: Full new content of the file
 implementation:
-  path: tools/scripts/file-write.js
+  type: script
+  path: scripts/file-write.js
   runtime: node

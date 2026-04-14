@@ -19,5 +19,6 @@ input_schema:
       type: boolean
       description: Case-insensitive match (default false)
 implementation:
-  path: tools/scripts/search.js
+  type: script
+  path: scripts/search.js
   runtime: node

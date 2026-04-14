@@ -1332,6 +1332,9 @@ ${AGENT_MEMORY ? "== MEMORY: KNOWN ERRORS ==\n" + AGENT_MEMORY : ""}`;
 // ── Lazy HTTP API server on :3002 (started only when frontend work begins) ─────
 
 let _apiServer = null;
+// Holds the resolve() for the current listenVoice() call so the /voice-result
+// route can fulfil it from the browser's Web Speech API transcription.
+let _pendingVoiceResolve = null;
 
 function startApiServerIfNeeded() {
   if (_apiServer) return;
@@ -1561,6 +1564,163 @@ function startApiServerIfNeeded() {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end("{}");
       }
+      return;
+    }
+
+    // ── GET /voice — browser voice agent UI (Web Speech API) ──────────────────
+    if (req.method === "GET" && req.url === "/voice") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Voice Input</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0d0d0d; color: #e8d5b7;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 100vh; gap: 24px;
+    padding: 32px;
+  }
+  h1 { font-size: 1.4rem; color: #c9a84c; letter-spacing: 0.05em; }
+  #status {
+    font-size: 1.1rem; color: #aaa; min-height: 1.5em; text-align: center;
+  }
+  #transcript {
+    font-size: 1.3rem; color: #fff; min-height: 2em; text-align: center;
+    max-width: 640px; line-height: 1.6;
+    border: 1px solid #333; border-radius: 8px; padding: 16px 24px;
+    background: #111; width: 100%;
+  }
+  #interim { color: #888; font-style: italic; }
+  button {
+    padding: 14px 40px; font-size: 1rem; border: none; border-radius: 8px;
+    cursor: pointer; font-weight: 600; letter-spacing: 0.04em;
+    transition: all 0.2s;
+  }
+  #btnListen { background: #4a1942; color: #fff; }
+  #btnListen.listening { background: #c0392b; animation: pulse 1s infinite; }
+  #btnSend { background: #27ae60; color: #fff; display: none; }
+  #btnRetry { background: #333; color: #aaa; display: none; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,0.5); }
+    50% { box-shadow: 0 0 0 10px rgba(192,57,43,0); }
+  }
+  .row { display: flex; gap: 12px; }
+  #note { font-size: 0.8rem; color: #555; text-align: center; }
+</style>
+</head>
+<body>
+<h1>🎤 Voice Agent</h1>
+<div id="status">Click Listen to start</div>
+<div id="transcript"><span id="final"></span><span id="interim"></span></div>
+<div class="row">
+  <button id="btnListen" onclick="startListening()">Listen</button>
+  <button id="btnSend" onclick="sendText()">Send ✓</button>
+  <button id="btnRetry" onclick="retry()">Retry</button>
+</div>
+<p id="note">This tab will close automatically after sending.</p>
+<script>
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog, finalText = "";
+
+function startListening() {
+  finalText = "";
+  document.getElementById("final").textContent = "";
+  document.getElementById("interim").textContent = "";
+  document.getElementById("btnSend").style.display = "none";
+  document.getElementById("btnRetry").style.display = "none";
+
+  recog = new SpeechRecognition();
+  recog.lang = "en-US";
+  recog.interimResults = true;
+  recog.continuous = false;
+  recog.maxAlternatives = 1;
+
+  recog.onstart = () => {
+    document.getElementById("status").textContent = "🔴 Listening…";
+    document.getElementById("btnListen").classList.add("listening");
+    document.getElementById("btnListen").textContent = "Listening…";
+  };
+  recog.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    document.getElementById("final").textContent = finalText;
+    document.getElementById("interim").textContent = interim;
+  };
+  recog.onend = () => {
+    document.getElementById("btnListen").classList.remove("listening");
+    document.getElementById("btnListen").textContent = "Listen";
+    if (finalText.trim()) {
+      document.getElementById("status").textContent = "✓ Got it — send or retry";
+      document.getElementById("btnSend").style.display = "";
+      document.getElementById("btnRetry").style.display = "";
+    } else {
+      document.getElementById("status").textContent = "Nothing heard — try again";
+      document.getElementById("btnRetry").style.display = "";
+    }
+  };
+  recog.onerror = (e) => {
+    document.getElementById("status").textContent = "Error: " + e.error;
+    document.getElementById("btnListen").classList.remove("listening");
+    document.getElementById("btnListen").textContent = "Listen";
+    document.getElementById("btnRetry").style.display = "";
+  };
+  recog.start();
+}
+
+async function sendText() {
+  const text = finalText.trim();
+  if (!text) return;
+  document.getElementById("status").textContent = "Sending…";
+  await fetch("/voice-result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+  document.getElementById("status").textContent = "✓ Sent! You can close this tab.";
+  document.getElementById("btnSend").style.display = "none";
+  document.getElementById("btnRetry").style.display = "none";
+  setTimeout(() => window.close(), 800);
+}
+
+function retry() {
+  finalText = "";
+  document.getElementById("final").textContent = "";
+  document.getElementById("interim").textContent = "";
+  document.getElementById("btnSend").style.display = "none";
+  document.getElementById("btnRetry").style.display = "none";
+  document.getElementById("status").textContent = "Click Listen to start";
+}
+
+// Auto-start listening on load
+window.onload = () => startListening();
+</script>
+</body>
+</html>`);
+      return;
+    }
+
+    // ── POST /voice-result — browser posts transcription back to the REPL ──────
+    if (req.method === "POST" && req.url === "/voice-result") {
+      let body = "";
+      req.on("data", d => { body += d; });
+      req.on("end", () => {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("ok");
+        try {
+          const { text } = JSON.parse(body);
+          if (_pendingVoiceResolve && text?.trim()) {
+            _pendingVoiceResolve(text.trim());
+            _pendingVoiceResolve = null;
+          }
+        } catch { /* ignore malformed */ }
+      });
       return;
     }
 
@@ -2389,6 +2549,7 @@ async function runAgent(prompt) {
 
       case "delta":
         process.stdout.write(msg.content);
+        if (voiceMode) _lastResponseText += msg.content;
         // Detect structured plan blocks emitted by agent personas
         if (msg.content.includes("[ARCHITECT PLAN]")) {
           process.stderr.write(
@@ -2495,6 +2656,50 @@ async function runAgent(prompt) {
   process.stderr.write(`${C.dim}[✓ ${subRole ?? "ORCHESTRATOR"} done in ${totalElapsed}s]${C.reset}\n`);
 }
 
+// ── Voice mode (Windows SAPI — no extra packages needed) ──────────────────────
+
+let voiceMode = false;
+let _lastResponseText = "";
+
+// TTS: speak text aloud via Windows Speech API
+function speak(text) {
+  if (!voiceMode) return;
+  const clean = text
+    .replace(/\x1b\[[0-9;]*m/g, "")   // strip ANSI
+    .replace(/['"\\]/g, " ")            // strip chars that break PS quoting
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 600);
+  if (!clean) return;
+  exec(
+    `powershell -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Rate = 1; $s.Speak([string]'${clean}')"`,
+    () => {}
+  );
+}
+
+// STT: open browser voice agent page, wait for transcription via /voice-result
+// Uses the browser's Web Speech API (Google-backed) — far more accurate than SAPI.
+function listenVoice(timeoutSecs = 60) {
+  return new Promise((resolve) => {
+    // Ensure the API server is up so the /voice and /voice-result routes exist
+    startApiServerIfNeeded();
+
+    // Reject/timeout if nothing comes back in time
+    const timer = setTimeout(() => {
+      _pendingVoiceResolve = null;
+      resolve("");
+    }, timeoutSecs * 1000);
+
+    _pendingVoiceResolve = (text) => {
+      clearTimeout(timer);
+      resolve(text);
+    };
+
+    // Open the browser tab — Windows `start` command works for this
+    exec(`start http://localhost:3002/voice`, () => {});
+  });
+}
+
 // ── REPL ────────────────────────────────────────────────────────────────────────
 
 const cliPrompt = process.argv.slice(2).join(" ").trim();
@@ -2506,19 +2711,38 @@ async function repl() {
     terminal: process.stdin.isTTY,
   });
 
-
-
-  const ask = () =>
+  const askText = () =>
     new Promise((resolve, reject) => {
       const onClose = () => reject(new Error("closed"));
       rl.once("close", onClose);
       if (process.stdin.isTTY) {
-        rl.question("you> ", (answer) => { rl.removeListener("close", onClose); resolve(answer); });
+        rl.question(
+          voiceMode ? `${C.magenta}${C.bold}you🎤>${C.reset} ` : "you> ",
+          (answer) => { rl.removeListener("close", onClose); resolve(answer); }
+        );
       } else {
         const onLine = (line) => { rl.removeListener("close", onClose); resolve(line); };
         rl.once("line", onLine);
       }
     });
+
+
+  const ask = async () => {
+    if (voiceMode && process.stdin.isTTY) {
+      process.stdout.write(
+        `\n${C.magenta}${C.bold}┌─ 🎤 Browser voice agent opening…${C.reset}\n` +
+        `${C.dim}│  Speak in the browser tab, click Send, then come back here.${C.reset}\n` +
+        `${C.magenta}${C.bold}└─ waiting for your voice…${C.reset}\n`
+      );
+      const heard = await listenVoice(60);
+      if (heard) {
+        process.stdout.write(`${C.magenta}${C.bold}you🎤> ${C.reset}${C.bold}${C.white}${heard}${C.reset}\n\n`);
+        return heard;
+      }
+      process.stdout.write(`${C.dim}  (timed out — type instead)${C.reset}\n`);
+    }
+    return askText();
+  };
 
   while (true) {
     let line;
@@ -2526,6 +2750,19 @@ async function repl() {
     if (line === null || line === undefined) break;
     const prompt = line.trim();
     if (!prompt) continue;
+
+    if (prompt.toLowerCase() === '/voice') {
+      voiceMode = !voiceMode;
+      const status = voiceMode ? `${C.green}ON${C.reset}` : `${C.red}OFF${C.reset}`;
+      process.stdout.write(`\n${C.magenta}${C.bold}Voice mode:${C.reset} ${status}\n`);
+      if (voiceMode) {
+        process.stdout.write(`${C.dim}  • Speak after the [LISTENING...] prompt\n`);
+        process.stdout.write(`  • Type /voice again to turn off\n`);
+        process.stdout.write(`  • Responses will be read aloud${C.reset}\n\n`);
+        speak("Voice mode enabled. I'm listening.");
+      }
+      continue;
+    }
 
     if (prompt.toLowerCase() === '/skills') {
       const skillsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "skills");
@@ -2540,7 +2777,11 @@ async function repl() {
       continue;
     }
 
+    _lastResponseText = "";
     await runAgent(prompt);
+    if (voiceMode && _lastResponseText) {
+      speak(_lastResponseText);
+    }
   }
 
   rl.close();

@@ -13,5 +13,6 @@ input_schema:
       type: string
       description: Working directory (default ".")
 implementation:
-  path: tools/scripts/shell-exec.js
+  type: script
+  path: scripts/shell-exec.js
   runtime: node
