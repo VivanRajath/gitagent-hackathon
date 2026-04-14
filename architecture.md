@@ -6,51 +6,70 @@ This document is a complete technical reference to every agent, sub-agent, skill
 
 ## 1. System Overview
 
-The system is a **tiered, cost-aware multi-agent orchestrator** that receives natural-language instructions and autonomously delegates them to specialized sub-agents based on task complexity. Its primary design goal is to keep LLM costs proportional to task difficulty — a typo fix should never consume architect-tier tokens.
+The system operates in two modes:
 
-The orchestrator coordinates **18 distinct agent personas** organized into **5 parent squads**, backed by **19 composable skills**, **4 declarative tools**, and a **git-committed memory layer** that learns from its own mistakes across sessions.
+**Code-editing mode** — a tiered, cost-aware multi-agent orchestrator that classifies natural-language edit requests by complexity and delegates to the cheapest sub-agent capable of handling them. A typo fix should never consume architect-tier tokens.
+
+**Website-building mode** — a four-stage AI pipeline (`website-builder`) that turns a one-line user request into a fully themed, live-reloading Next.js site. Images are generated through a three-tier stack: **Gemini Imagen 3** (primary) → **Pollinations.ai** (fallback) → **Puter.js** (client-side).
+
+The orchestrator coordinates **23 distinct agent personas** organized into **6 squads**, backed by **19 composable skills**, **4 declarative tools**, and a **git-committed memory layer** that learns from its own mistakes across sessions.
 
 ---
 
 ## 2. Full Agent Hierarchy
 
 ```
-repo-sandbox-agent (Orchestrator)
+repo-sandbox-agent  (Orchestrator)
 │
-├── guardrails (Safety Orchestrator)
-│   ├── policy-enforcer      — Reads RULES.md, issues ALLOW/BLOCK on every tool dispatch
-│   ├── secret-sentinel      — Blocks reads/writes to .env, *.pem, *.key; scans diffs for leaked credentials
-│   ├── diff-auditor         — Pre-write safety review: catches mass deletions, eval injection, auth removal
-│   └── scope-validator      — Validates route-intent tier assignment; prevents underflow (complex→cheap) and flags overflow (simple→expensive)
+├── guardrails  (Safety Orchestrator)
+│   ├── policy-enforcer      — reads RULES.md, issues ALLOW/BLOCK on every tool dispatch
+│   ├── secret-sentinel      — blocks .env, *.pem, *.key; scans diffs for leaked credentials
+│   ├── diff-auditor         — pre-write safety: mass deletions, eval injection, auth removal
+│   └── scope-validator      — validates tier assignment; prevents underflow and overflow
 │
-├── research-agent (Search Orchestrator)
-│   ├── github-searcher      — Searches GitHub repos, code, and issues for prior art
-│   ├── devpost-searcher     — Searches Devpost hackathon projects for relevant implementations
-│   ├── web-searcher         — General HTTP/web search fallback when GitHub+Devpost yield < 3 results
-│   └── solution-proposer    — Aggregates all search results into a single actionable implementation proposal
+├── research-agent  (Search Orchestrator)
+│   ├── github-searcher      — GitHub repos, code, issues
+│   ├── devpost-searcher     — Devpost hackathon projects
+│   ├── web-searcher         — general web fallback when GitHub+Devpost yield < 3 results
+│   └── solution-proposer    — aggregates all results → actionable proposal
 │
-├── resourcer-agent          — Curates visual assets: Unsplash/Picsum image URLs, WCAG-compliant color palettes, Google Font pairings
+├── resourcer-agent          — Unsplash/Picsum image URLs, WCAG palettes, Google Font pairings
 │
-├── image-gen-agent          — Generates AI images via Pollinations.ai and writes CSS @keyframes animations from scratch
+├── image-gen-agent          — AI image prompts + CSS @keyframes animations
+│   └── skills/generate-images
+│         ├── Gemini Imagen 3  (primary — POST imagen-3.0-generate-002, base64 → disk)
+│         ├── Pollinations.ai  (fallback — download → disk, or URL direct)
+│         └── Puter.js config  (client-side — written to puter-image-config.js)
 │
-└── code-editor (Edit Orchestrator)
-    ├── jnr-developer        — Single-file edits, fast/cheap models, no shell access
-    ├── snr-developer        — Multi-file feature work, standard models, no shell; receives error reports from site-tester
-    ├── architect            — System-level changes, top-tier models, read-only shell access
-    ├── uiux-designer        — All UI/UX: components, layouts, styling, canvas-editor hand-tracking interface
-    │   └── canvas-editor    — Browser-based MediaPipe hand-tracking + tldraw canvas (localhost:3000)
-    └── site-tester          — QA: screenshots localhost:3001, harvests console errors, dispatches fixes to snr-developer (max 3 cycles)
+├── website-builder  (Website Generation Pipeline Orchestrator)
+│   ├── research-agent       — design DNA: site type, palette, variants, image keywords
+│   ├── resourcer-agent      — image theme phrase, per-zone seeds, font
+│   └── uiux-agent           — all site copy: nav, hero, cards, features, CTA, footer
+│
+└── code-editor  (Edit Orchestrator)
+    ├── jnr-developer        — single-file edits, cheap models, no shell
+    ├── snr-developer        — multi-file features, standard models; receives fix reports from site-tester
+    ├── architect            — system-level changes, top-tier models, read-only shell
+    ├── uiux-designer        — all UI/UX; canvas-editor hand-tracking interface
+    │   └── canvas-editor    — MediaPipe + tldraw browser canvas (localhost:3000)
+    └── site-tester          — screenshot QA → snr-developer fix loop (max 3 cycles)
 ```
+
+> **Note on name overlap:** `website-builder/research-agent` extracts design parameters
+> (palette, variants, aesthetic). The top-level `research-agent` does web search and
+> code lookup. Same name, different purpose. Same distinction applies to `resourcer-agent`.
 
 ---
 
 ## 3. Agent Definitions (In Depth)
 
-Every agent is defined as a directory following the gitagent standard. Each contains:
-- `agent.yaml` — manifest: name, model preference, fallbacks, sub-agents, runtime config
-- `SOUL.md` — identity, personality, hierarchy position, hard limits
-- `DUTIES.md` — concrete responsibilities, input/output contracts, scope rules
-- `SKILL.md` — optional; instruction module for the agent's primary capability
+Every agent follows the gitagent standard. Each directory contains:
+- `agent.yaml` — manifest: `spec_version`, name, model, skills list, tags
+- `SOUL.md` — identity, personality, expertise, communication style
+- `RULES.md` — must-always / must-never hard constraints
+- `skills/<name>/SKILL.md` — YAML frontmatter (`name`, `description`, `allowed-tools`) + execution instructions
+
+`loadAgentSystem()` in `index.js` composes the system prompt by joining SOUL.md + RULES.md + all skills/*/SKILL.md (frontmatter stripped). Falls back to legacy `SYSTEM.md` if `SOUL.md` is absent. `image-gen-agent` resolves from `agents/image-gen-agent/`; all website-builder pipeline agents resolve from `agents/website-builder/<name>/`.
 
 ### 3.1 The Orchestrator (`repo-sandbox-agent`)
 
@@ -160,25 +179,62 @@ A single BLOCK from any sub-agent halts the entire action.
 
 ### 3.5 `image-gen-agent`
 
-**Purpose**: Creative visual synthesis. Generates custom AI images via the Pollinations.ai free API and writes bespoke CSS `@keyframes` animations matched to the theme's emotional core.
+**Purpose**: Creative visual synthesis. Crafts image prompts for each layout zone and serves them through a three-tier image stack. Also writes bespoke CSS `@keyframes` animations matched to the theme's emotional core.
 
-**Image Generation**:
-- URL pattern: `https://image.pollinations.ai/prompt/<encoded>?width=W&height=H&nologo=true&seed=N`
-- Prompts describe aesthetics, never named characters or copyrighted IP.
-- Seed values are deterministic: derived from `theme.charCodeAt(0) * 1000 + theme.length * 17`.
-- Max 4 AI-generated images per site.
+**Image Generation Stack** (tried in order):
+
+| Tier | Service | Method |
+|---|---|---|
+| 1 (primary) | Gemini Imagen 3 | `POST /imagen-3.0-generate-002:predict?key=GEMINI_API_KEY` → base64 → saved to disk |
+| 2 (fallback) | Pollinations.ai | HTTP download → saved to `/public/images/` |
+| 3 (last resort) | Pollinations.ai URL | URL referenced directly (no download) |
+| Client-side | Puter.js | Prompts written to `puter-image-config.js` → `PuterImageLoader.tsx` calls `puter.ai.txt2img()` |
+
+**Prompt Rules**:
+- Describe aesthetics, never named characters or copyrighted IP
+- Seed: `theme.charCodeAt(0) * 1000 + theme.length * 17` for determinism
+- Max 4 AI-generated images per site (performance budget)
+- Prompts ≤ 200 characters (Pollinations URL limit)
+- Always append `nologo=true` to Pollinations URLs
+
+**Zone Sizing**: hero 1600×900 · card 400×300 · cta 1200×400
 
 **Animation Authoring**:
-- Writes CSS `@keyframes` from scratch, matched to theme:
-  - Horror/dark → flicker, glitch, red-pulse
-  - Sci-fi → neon-glow, scan-lines
+- Writes CSS `@keyframes` from scratch matched to theme:
+  - Horror/dark → flicker, glitch-text, red-pulse, scan-lines
+  - Sci-fi → neon-glow, scan-lines, data-stream
   - Nature → float, sway, breathing
   - Corporate → slide-in, fade, hover-lift
-- Every animation must include a `prefers-reduced-motion` media query override.
+- Every animation ships with a `prefers-reduced-motion` media query override
 
 ---
 
-### 3.6 The Code-Editor Squad
+### 3.6 The Website-Builder Squad
+
+**Purpose**: Four-stage AI pipeline that turns a one-line user request into a fully themed Next.js site. Each stage is an independent gitagent with its own `SOUL.md`, `RULES.md`, and `skills/`.
+
+#### Stage 1 — `website-builder/research-agent`
+Extracts design DNA from the user's request. Returns: `siteType`, `aesthetic`, `colorPalette` (primary/secondary/bg/text), `variants` (navbar/hero/cards/features/cta/footer, each 0–4), `imageKeywords`, `fontDisplay`.
+
+**Key rule**: `colorPalette.secondary` must always be a bright, glowing accent — never dark or muted.
+
+#### Stage 2 — `website-builder/resourcer-agent`
+Translates design DNA into visual resource parameters. Returns: `imageTheme` (3–5 keyword phrase, franchise-specific), `heroSeed`, `cardSeeds[3]`, `ctaSeed` (all random 5-digit ints), `fontDisplay`.
+
+#### Stage 3 — `website-builder/uiux-agent`
+Writes all site copy themed to the request. Returns: `brand`, `tagline`, `navLinks`, `heroHeadline` (≤8 words), `heroSubtext`, `heroCTA1`, `heroCTA2`, `cards[3]`, `featureSectionTitle`, `features[4]` (with emoji icons), `ctaHeadline`, `ctaBody`, `ctaButton`, `footerLinks[3]`.
+
+#### Stage 4 — `image-gen-agent` (shared)
+Receives an image spec built from stages 1–3. Crafts prompts for each zone, runs the three-tier image stack, writes `puter-image-config.js`, and produces CSS animations. See §3.5.
+
+**Pipeline assembly** after all four stages:
+- `generated-site/src/app/site-content.ts` — all copy + image alt text
+- `generated-site/src/app/design-variants.json` — palette + variant indices
+- `generated-site/public/puter-image-config.js` — three-tier image config
+
+---
+
+### 3.7 The Code-Editor Squad
 
 **Purpose**: Edit orchestrator. Receives routed intents and dispatches to the correct tier sub-agent. Never writes code directly — all writes go through sub-agents.
 
@@ -255,32 +311,37 @@ Skills are NOT callable tools. They are instruction documents (`SKILL.md` with Y
 
 ## 5. The Website Generation Pipeline (`architect-website`)
 
-This is the master skill. When the user says "create a Harry Potter website", the following 7-phase pipeline executes autonomously:
+This is the master skill. When the user says "create a Hulk themed website", the following pipeline executes autonomously:
 
 ```
-Phase 1: Research & Resources
-   Architect deduces theme colors, typography, and vibe from its knowledge.
+Stage 1: website-builder/research-agent
+   Extracts design DNA: siteType, aesthetic, colorPalette, variants, imageKeywords, fontDisplay.
          ↓
-Phase 2: Visual Asset Construction
-   Builds Pollinations.ai image URLs as plain strings (hero, 3× cards, CTA).
-   Emits [ARCHITECT PLAN] block for observable logging.
+Stage 2: website-builder/resourcer-agent
+   Produces imageTheme phrase, per-zone seeds (hero/cards/cta), fontDisplay.
          ↓
-Phase 3: Blueprint
-   Plans 6 standard components: Navbar, Hero, Card, FeatureStrip, CTABanner, Footer.
+Stage 3: website-builder/uiux-agent
+   Writes all site copy: brand, navLinks, heroHeadline, cards, features, CTA, footer.
          ↓
-Phase 4: Component Generation
-   snr-developer writes site-content.ts (the data bridge) and globals.css (:root variables).
-   Locked template components (Navbar.tsx, Hero.tsx, etc.) are auto-restored from index.js.
+Stage 4: image-gen-agent
+   Builds image specs from stages 1–3.
+   Tries Gemini Imagen 3 → Pollinations.ai download → Pollinations.ai URL.
+   Writes puter-image-config.js for client-side Puter.js fallback.
+   Produces CSS @keyframes animations.
          ↓
-Phase 5: Launch
-   Calls launch_frontend('http://localhost:3000') to start the Next.js dev server.
+Assembly
+   Writes site-content.ts, design-variants.json, puter-image-config.js.
+   snr-developer restores locked component templates from index.js golden copies.
          ↓
-Phase 6: QA
-   site-tester screenshots the running site, checks console errors.
-   Errors → dispatched to snr-developer for fixes (max 3 cycles).
+Launch
+   Calls launch_frontend('http://localhost:3001').
          ↓
-Phase 7: Report
-   On clean pass: returns visual score + one-line summary to user.
+QA
+   site-tester screenshots localhost:3001, harvests console errors.
+   Errors → snr-developer fixes (max 3 cycles).
+         ↓
+Report
+   Returns visual score + one-line summary to user.
 ```
 
 ---
@@ -311,14 +372,16 @@ Git-committed memory that persists across sessions:
 
 ## 8. The Runtime (`index.js`)
 
-The orchestrator runtime is a single `index.js` file (~1500 lines) that:
+The orchestrator runtime is a single `index.js` file (~2550 lines) that:
 
 1. **Imports `gitclaw`**: Uses `import { query } from "gitclaw"` to invoke the agent SDK.
 2. **Defines 5 external tools**: `file_read`, `file_write`, `fetch_images`, `launch_frontend`, `append_memory` — injected into the gitclaw query at runtime.
 3. **Runs a REPL**: Interactive terminal loop (`you>`) that accepts natural-language prompts.
 4. **Hosts an API server**: Express server on `localhost:3002` that accepts POST `/command` requests from the browser-based spatial overlay for real-time voice/gesture-driven edits.
 5. **Auto-restores locked templates**: On every website generation, component templates (Navbar, Hero, Card, etc.) and `globals.css` are force-written from hardcoded golden templates in `index.js` to prevent the LLM from breaking the scaffold.
-6. **Streams agent events**: Processes `delta`, `assistant`, `tool_use`, `tool_result`, and `system` message types from the gitclaw SDK, rendering them as color-coded terminal logs with role attribution (`[ARCHITECT]`, `[SNR-DEV]`, `[QA]`, `[MEMORY]`, `[PREVIEW]`, `[EDITOR]`).
+6. **Streams agent events**: Processes `delta`, `assistant`, `tool_use`, `tool_result`, and `system` message types from the gitclaw SDK, rendering color-coded terminal logs with role attribution (`[ARCHITECT]`, `[RESEARCH]`, `[RESOURCER]`, `[UIUX]`, `[IMAGE-GEN]`, `[SNR-DEV]`, `[QA]`, `[MEMORY]`, `[PREVIEW]`, `[EDITOR]`).
+7. **gitagent agent loader** (`loadAgentSystem`): Resolves system prompts per agent using the gitagent standard (SOUL.md + RULES.md + skills/*/SKILL.md). Falls back to SYSTEM.md for legacy agents. Routes `image-gen-agent` to `agents/image-gen-agent/` and all website-builder pipeline agents to `agents/website-builder/<name>/`.
+8. **Three-tier image prefetch** (`prefetchImages`): Runs before the browser opens. Tries Gemini Imagen 3 → Pollinations.ai download → Pollinations.ai URL for each zone (hero, card×3, cta). Results saved to `generated-site/public/images/`.
 
 ---
 
