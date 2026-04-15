@@ -25,7 +25,7 @@ function HeroCinematic({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
           {headline}
         </h1>
         <p className="fade-in-up-delay-1" style={{
-          fontSize:'1.15rem',lineHeight:1.75,color:'var(--color-text)',opacity:0.88,
+          fontSize:'1.15rem',lineHeight:1.75,color:'var(--color-hero-text)',opacity:0.88,
           maxWidth:'38rem',margin:'0 auto 2.5rem'}}>
           {subtext}
         </p>
@@ -64,14 +64,14 @@ function HeroSplit({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
         </p>
         <h1 style={{
           fontSize:'clamp(2.5rem,5vw,4.5rem)',fontWeight:900,lineHeight:1.08,
-          color:'var(--color-text)',fontFamily:'var(--font-display)',
+          color:'var(--color-hero-text)',fontFamily:'var(--font-display)',
           letterSpacing:'-0.02em',marginBottom:'1.5rem',
         }}>
           {headline.split(' ').slice(0,3).join(' ')}{' '}
           <span style={{color:'var(--color-secondary)'}}>{headline.split(' ').slice(3).join(' ')}</span>
         </h1>
         <p style={{fontSize:'1.1rem',lineHeight:1.7,opacity:0.75,
-          color:'var(--color-text)',marginBottom:'2.5rem',maxWidth:'32rem'}}>
+          color:'var(--color-hero-text)',marginBottom:'2.5rem',maxWidth:'32rem'}}>
           {subtext}
         </p>
         <div style={{display:'flex',gap:'1rem',flexWrap:'wrap'}}>
@@ -84,7 +84,7 @@ function HeroSplit({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
           </button>
           <button style={{
             padding:'0.85rem 2rem',borderRadius:'0.5rem',fontWeight:700,
-            background:'transparent',color:'var(--color-text)',
+            background:'transparent',color:'var(--color-hero-text)',
             border:'1px solid rgba(255,255,255,0.2)',cursor:'pointer',fontSize:'0.95rem',
           }}>
             {cta2} →
@@ -105,7 +105,7 @@ function HeroSplit({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
           background:'rgba(255,255,255,0.06)',backdropFilter:'blur(16px)',
           border:'1px solid rgba(255,255,255,0.12)',
         }}>
-          <p style={{margin:0,fontSize:'0.8rem',opacity:0.6,color:'var(--color-text)',marginBottom:'0.5rem'}}>FEATURED</p>
+          <p style={{margin:0,fontSize:'0.8rem',opacity:0.6,color:'var(--color-hero-text)',marginBottom:'0.5rem'}}>FEATURED</p>
           <p style={{margin:0,fontWeight:700,color:'var(--color-secondary)',fontSize:'1rem',fontFamily:'var(--font-display)'}}>
             {headline}
           </p>
@@ -149,7 +149,7 @@ function HeroBoldType({ headline, subtext, cta1, cta2 }: HeroProps) {
       </h1>
       <p style={{
         fontSize:'1.2rem',lineHeight:1.7,opacity:0.65,
-        color:'var(--color-text)',marginBottom:'3rem',maxWidth:'36rem',
+        color:'var(--color-hero-text)',marginBottom:'3rem',maxWidth:'36rem',
       }}>
         {subtext}
       </p>
@@ -174,7 +174,7 @@ function HeroBoldType({ headline, subtext, cta1, cta2 }: HeroProps) {
       </div>
       <div style={{
         marginTop:'6rem',display:'flex',gap:'3rem',opacity:0.4,
-        fontSize:'0.75rem',letterSpacing:'0.1em',color:'var(--color-text)',
+        fontSize:'0.75rem',letterSpacing:'0.1em',color:'var(--color-hero-text)',
         textTransform:'uppercase',
       }}>
         {['Award Winning','Industry Leader','Trusted Globally'].map(t => (
@@ -211,7 +211,7 @@ function HeroMagazine({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
           </div>
           <h1 style={{
             fontSize:'clamp(3rem,6vw,5.5rem)',fontWeight:900,lineHeight:1.0,
-            color:'var(--color-text)',fontFamily:'var(--font-display)',
+            color:'var(--color-hero-text)',fontFamily:'var(--font-display)',
             letterSpacing:'-0.03em',marginBottom:'2rem',
           }}>
             {headline.split(' ').slice(0,2).join(' ')}{'\n'}
@@ -221,7 +221,7 @@ function HeroMagazine({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
           </h1>
           <p style={{
             fontSize:'1rem',lineHeight:1.75,opacity:0.65,
-            color:'var(--color-text)',maxWidth:'28rem',
+            color:'var(--color-hero-text)',maxWidth:'28rem',
           }}>
             {subtext}
           </p>
@@ -234,7 +234,7 @@ function HeroMagazine({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
           }}>{cta1}</button>
           <button style={{
             flex:1,padding:'1rem',fontWeight:700,fontSize:'0.9rem',
-            background:'transparent',color:'var(--color-text)',
+            background:'transparent',color:'var(--color-hero-text)',
             border:'1px solid rgba(255,255,255,0.15)',cursor:'pointer',borderRadius:'0.25rem',
           }}>{cta2}</button>
         </div>
@@ -256,7 +256,7 @@ function HeroMagazine({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) {
             Cover Story
           </p>
           <p style={{margin:0,fontWeight:800,fontSize:'1.1rem',
-            color:'var(--color-text)',fontFamily:'var(--font-display)'}}>
+            color:'var(--color-hero-text)',fontFamily:'var(--font-display)'}}>
             {headline}
           </p>
         </div>
@@ -304,7 +304,7 @@ function HeroAsymmetric({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) 
         </p>
         <h1 style={{
           fontSize:'clamp(3rem,8vw,6.5rem)',fontWeight:900,lineHeight:0.95,
-          color:'var(--color-text)',fontFamily:'var(--font-display)',
+          color:'var(--color-hero-text)',fontFamily:'var(--font-display)',
           letterSpacing:'-0.03em',marginBottom:'2rem',
           textShadow: glitch
             ? '2px 0 var(--color-secondary),-2px 0 var(--color-primary)'
@@ -315,7 +315,7 @@ function HeroAsymmetric({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) 
         </h1>
         <p style={{
           fontSize:'1.1rem',lineHeight:1.7,opacity:0.7,
-          color:'var(--color-text)',marginBottom:'3rem',maxWidth:'34rem',
+          color:'var(--color-hero-text)',marginBottom:'3rem',maxWidth:'34rem',
         }}>
           {subtext}
         </p>
@@ -330,7 +330,7 @@ function HeroAsymmetric({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) 
           </button>
           <button style={{
             background:'none',border:'none',cursor:'pointer',
-            color:'var(--color-text)',fontSize:'0.9rem',
+            color:'var(--color-hero-text)',fontSize:'0.9rem',
             display:'flex',alignItems:'center',gap:'0.5rem',fontWeight:600,
             opacity:0.75,
           }}>
@@ -344,7 +344,7 @@ function HeroAsymmetric({ headline, subtext, cta1, cta2, imageUrl }: HeroProps) 
         display:'flex',flexDirection:'column',alignItems:'center',gap:'0.4rem',
         opacity:0.4,
       }}>
-        <span style={{fontSize:'0.6rem',letterSpacing:'0.15em',textTransform:'uppercase',color:'var(--color-text)'}}>Scroll</span>
+        <span style={{fontSize:'0.6rem',letterSpacing:'0.15em',textTransform:'uppercase',color:'var(--color-hero-text)'}}>Scroll</span>
         <div style={{width:'1px',height:'3rem',background:'var(--color-secondary)'}}/>
       </div>
     </section>

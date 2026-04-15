@@ -1,77 +1,82 @@
 [
   {
     "id": 0,
-    "name": "Dark Knight",
+    "name": "Darker Greenwood",
     "palette": {
-      "primary": "#212121",
-      "secondary": "#454545",
-      "bg": "#000000",
-      "text": "#FFFFFF"
+      "primary": "#5c8f32",
+      "secondary": "#2f6d2f",
+      "bg": "#c9e4ca",
+      "text": "#333333"
     },
-    "fontDisplay": "'Arial Black',sans-serif",
-    "animationStyle": "glitch",
+    "fontDisplay": "'Lato',sans-serif",
+    "animationStyle": "float",
     "spacingScale": "compact",
-    "shadowStyle": "neon",
-    "previewGradient": "linear-gradient(135deg,#000000 0%,#212121 100%)"
+    "shadowStyle": "soft",
+    "previewGradient": "linear-gradient(135deg,#3e8e41 0%,#5c8f32 100%)",
+    "recommended": false
   },
   {
     "id": 1,
-    "name": "Web Slinger",
+    "name": "Light Greenwood",
     "palette": {
-      "primary": "#FFFFFF",
-      "secondary": "#CCCCCC",
-      "bg": "#F7F7F7",
-      "text": "#000000"
+      "primary": "#c6efce",
+      "secondary": "#8bc34a",
+      "bg": "#f7fcf7",
+      "text": "#666666"
     },
-    "fontDisplay": "'Comic Sans MS',sans-serif",
-    "animationStyle": "float",
+    "fontDisplay": "'Montserrat',sans-serif",
+    "animationStyle": "fade-in-up",
     "spacingScale": "airy",
-    "shadowStyle": "soft",
-    "previewGradient": "linear-gradient(135deg,#F7F7F7 0%,#FFFFFF 100%)"
+    "shadowStyle": "flat",
+    "previewGradient": "linear-gradient(135deg,#c6efce 0%,#f7fcf7 100%)",
+    "recommended": false
   },
   {
     "id": 2,
-    "name": "Neon City",
+    "name": "Neon Greenwood",
     "palette": {
-      "primary": "#39FF14",
-      "secondary": "#08E8FF",
-      "bg": "#2F2F2F",
-      "text": "#FFFFFF"
+      "primary": "#33cc33",
+      "secondary": "#00ff00",
+      "bg": "#ccffcc",
+      "text": "#000000"
     },
-    "fontDisplay": "'Pacifico',sans-serif",
+    "fontDisplay": "'Arial',sans-serif",
     "animationStyle": "neon-glow",
     "spacingScale": "normal",
     "shadowStyle": "neon",
-    "previewGradient": "linear-gradient(135deg,#08E8FF 0%,#39FF14 100%)"
+    "previewGradient": "linear-gradient(135deg,#33cc33 0%,#00ff00 100%)",
+    "recommended": false
   },
   {
     "id": 3,
-    "name": "Muted Hero",
+    "name": "Muted Greenwood",
     "palette": {
-      "primary": "#964B00",
-      "secondary": "#663300",
-      "bg": "#432B1A",
-      "text": "#FFFFFF"
+      "primary": "#87a35e",
+      "secondary": "#5c6f63",
+      "bg": "#d9e4d9",
+      "text": "#777777"
     },
-    "fontDisplay": "'Verdana',sans-serif",
-    "animationStyle": "fade-in-up",
-    "spacingScale": "compact",
+    "fontDisplay": "'Merriweather',sans-serif",
+    "animationStyle": "glitch",
+    "spacingScale": "normal",
     "shadowStyle": "flat",
-    "previewGradient": "linear-gradient(135deg,#663300 0%,#964B00 100%)"
+    "previewGradient": "linear-gradient(135deg,#87a35e 0%,#5c6f63 100%)",
+    "recommended": false
   },
   {
     "id": 4,
-    "name": "Vibrant Vigilante",
+    "name": "Greenwood",
     "palette": {
-      "primary": "#FFC107",
-      "secondary": "#FF9900",
-      "bg": "#FFFFFF",
-      "text": "#000000"
+      "primary": "#8bc34a",
+      "secondary": "#3e8e41",
+      "bg": "#f2f9f4",
+      "text": "#444444"
     },
-    "fontDisplay": "'Impact',sans-serif",
-    "animationStyle": "flicker",
-    "spacingScale": "normal",
+    "fontDisplay": "'Open Sans',sans-serif",
+    "animationStyle": "float",
+    "spacingScale": "airy",
     "shadowStyle": "soft",
-    "previewGradient": "linear-gradient(135deg,#FF9900 0%,#FFC107 100%)"
+    "previewGradient": "linear-gradient(135deg,#3e8e41 0%,#8bc34a 100%)",
+    "recommended": true
   }
 ]

@@ -12,7 +12,7 @@ an image theme base prompt, deterministic generation seeds per zone, and typogra
 
 ## Inputs
 Receive the full research-agent JSON output including `aesthetic`, `imageKeywords`,
-`colorPalette`, `siteType`, and `fontDisplay`.
+`colorPalette`, `siteType`, and `fontDisplay`. Also receive the original user request.
 
 ## Instructions
 
@@ -44,6 +44,14 @@ Pick a Google Font that matches the aesthetic:
 - Nature/organic → `'Playfair Display'`, `'Lora'`, `'Cormorant Garamond'`
 Always add a CSS fallback: `'Creepster', cursive` / `'Orbitron', monospace` / `'Inter', sans-serif`
 
+### Palette Validation (refinedPalette)
+Review the `research.colorPalette` against the imageTheme and user's stated intent. Produce a `refinedPalette` that:
+- Keeps colors that already match the intent well
+- Corrects any mismatch (e.g. if user said "yellow site" but research returned a dark bg, fix the bg to a warm light)
+- Ensures `primary` reflects the user's explicitly named color if any
+- Ensures `bg` matches the mood (warm light for food/restaurant, dark for gaming/horror, etc.)
+- Ensures `text` has high contrast against `bg`
+
 ## Output Format
 Return ONLY this JSON (no markdown, no backticks):
 ```json
@@ -52,6 +60,12 @@ Return ONLY this JSON (no markdown, no backticks):
   "heroSeed": 73841,
   "cardSeeds": [21934, 58271, 94013],
   "ctaSeed": 37612,
-  "fontDisplay": "'Bangers', cursive"
+  "fontDisplay": "'Bangers', cursive",
+  "refinedPalette": {
+    "primary": "#hex",
+    "secondary": "#hex",
+    "bg": "#hex",
+    "text": "#hex"
+  }
 }
 ```

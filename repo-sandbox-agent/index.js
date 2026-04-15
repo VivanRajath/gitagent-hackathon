@@ -5,6 +5,7 @@ import path from "path";
 import { readFileSync, appendFileSync, readdirSync, rmSync, existsSync } from "fs";
 import { spawn, exec } from "child_process";
 import http from "http";
+import { EventEmitter } from "events";
 
 // ── ANSI color helpers ─────────────────────────────────────────────────────────
 const _activePorts = new Set();
@@ -28,6 +29,7 @@ function logEvent(role, message, emojiIgnored = "", color = C.cyan) {
   process.stderr.write(
     `${C.dim}[${ts}]${C.reset} ${color}${C.bold}[${role.padEnd(12)}]${C.reset} ${message}\n`
   );
+  pushLog(role, message);
 }
 
 // ── logHandoff — shows agent-to-agent delegation in logs ──────────────────────
@@ -38,6 +40,7 @@ function logHandoff(fromRole, toRole, reason) {
     ` ${C.dim}──▶${C.reset} ${C.bold}${toRole}${C.reset}` +
     (reason ? ` ${C.dim}(${reason})${C.reset}` : '') + '\n'
   );
+  pushLog('→', `${fromRole} ──▶ ${toRole}${reason ? ` (${reason})` : ''}`);
 }
 
 // ── classifyIntent — maps user prompt to an agent tier ────────────────────────
@@ -78,6 +81,8 @@ const FULL_GLOBALS_CSS_TEMPLATE = `@import "tailwindcss";
   --color-secondary: #c9a84c;
   --color-bg: #0d0d0d;
   --color-text: #e8d5b7;
+  --color-nav-text: var(--color-text);
+  --color-hero-text: var(--color-text);
   --color-on-primary: #ffffff;
   --color-on-secondary: #000000;
   --font-display: 'Cinzel', serif;
@@ -741,11 +746,12 @@ export default function SpatialVoiceOverlay() {
   // Restore layout.tsx — always keep this exact structure, never let agent overwrite
   const layoutFile = path.join(site, "app", "layout.tsx");
   const layoutContent = readFileSync(layoutFile, "utf-8").trim();
-  if (!layoutContent.includes("SpatialVoiceOverlay")) {
+  if (!layoutContent.includes("SpatialVoiceOverlay") || !layoutContent.includes("VoiceEditButton")) {
     writeFileSync(layoutFile, `import type { Metadata } from 'next';
 import './globals.css';
 import SpatialVoiceOverlay from '../components/SpatialVoiceOverlay';
 import PuterImageLoader from '../components/PuterImageLoader';
+import VoiceEditButton from '../components/VoiceEditButton';
 
 export const metadata: Metadata = { title: 'My Site' };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -760,11 +766,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <SpatialVoiceOverlay />
         <PuterImageLoader />
+        <VoiceEditButton />
       </body>
     </html>
   );
 }`, "utf-8");
-    process.stderr.write("[restore] Rebuilt broken layout.tsx with Spatial Overlay + PuterImageLoader\n");
+    process.stderr.write("[restore] Rebuilt broken layout.tsx with Spatial Overlay + PuterImageLoader + VoiceEditButton\n");
   }
 
   // Always validate globals.css — fix it every startup if broken
@@ -784,7 +791,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     const rootMatch = cssContent.match(/:root\s*\{[^}]+\}/s);
     const rootBlock = rootMatch
       ? rootMatch[0]
-      : ":root {\n  --color-primary: #4a1942;\n  --color-secondary: #c9a84c;\n  --color-bg: #0d0d0d;\n  --color-text: #e8d5b7;\n  --font-display: 'Cinzel', serif;\n}";
+      : ":root {\n  --color-primary: #4a1942;\n  --color-secondary: #c9a84c;\n  --color-bg: #0d0d0d;\n  --color-text: #e8d5b7;\n  --color-nav-text: #e8d5b7;\n  --color-hero-text: #e8d5b7;\n  --font-display: 'Cinzel', serif;\n}";
     // Rebuild: import + :root + everything after :root in the template
     const afterRoot = FULL_GLOBALS_CSS_TEMPLATE.indexOf("*, *::before");
     const tail = afterRoot !== -1 ? FULL_GLOBALS_CSS_TEMPLATE.slice(afterRoot) : "";
@@ -968,6 +975,7 @@ function guardrailsSync(filePath, content) {
     'layout.tsx', 'page.tsx',
     'SpatialVoiceOverlay.tsx', 'SpatialLayout.tsx', 'SpatialTarget.tsx',
     'SpatialEditor.tsx', 'SpatialContext.tsx', 'AgentBridge.ts',
+    'VoiceEditButton.tsx', 'PuterImageLoader.tsx',
   ];
   if (LOCKED.includes(bn))
     return {
@@ -1281,7 +1289,7 @@ Examples by site type:
   CSS:  ${GENERATED_SITE}/src/app/globals.css        ← only the :root { } block
 
 == LOCKED FILES (do not touch) ==
-  layout.tsx · page.tsx · SpatialVoiceOverlay.tsx · SpatialLayout.tsx · SpatialTarget.tsx
+  layout.tsx · page.tsx · SpatialVoiceOverlay.tsx · SpatialLayout.tsx · SpatialTarget.tsx · VoiceEditButton.tsx · PuterImageLoader.tsx
 
 == WHEN BUILDING A WEBSITE ==
 STEP 1 — Write site-content.ts with ALL sections AND variants block:
@@ -1332,9 +1340,19 @@ ${AGENT_MEMORY ? "== MEMORY: KNOWN ERRORS ==\n" + AGENT_MEMORY : ""}`;
 // ── Lazy HTTP API server on :3002 (started only when frontend work begins) ─────
 
 let _apiServer = null;
-// Holds the resolve() for the current listenVoice() call so the /voice-result
-// route can fulfil it from the browser's Web Speech API transcription.
-let _pendingVoiceResolve = null;
+// EventEmitter used to relay browser Web Speech transcriptions to the REPL.
+const _voiceEvents = new EventEmitter();
+_voiceEvents.setMaxListeners(5);
+
+// ── SSE log-stream — push REPL logs to /voice browser tab ────────────────────
+const _sseClients = new Set();
+function pushLog(role, message) {
+  if (_sseClients.size === 0) return;
+  const data = JSON.stringify({ role, message, ts: new Date().toTimeString().slice(0, 8) });
+  for (const res of _sseClients) {
+    try { res.write(`data: ${data}\n\n`); } catch { _sseClients.delete(res); }
+  }
+}
 
 function startApiServerIfNeeded() {
   if (_apiServer) return;
@@ -1567,6 +1585,20 @@ function startApiServerIfNeeded() {
       return;
     }
 
+    // ── GET /log-stream — SSE feed of REPL logEvent calls ───────────────────────
+    if (req.method === "GET" && req.url === "/log-stream") {
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+      });
+      res.write(": connected\n\n");
+      _sseClients.add(res);
+      req.on("close", () => _sseClients.delete(res));
+      return;
+    }
+
     // ── GET /voice — browser voice agent UI (Web Speech API) ──────────────────
     if (req.method === "GET" && req.url === "/voice") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -1574,64 +1606,513 @@ function startApiServerIfNeeded() {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Voice Input</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    background: #0d0d0d; color: #e8d5b7;
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: center; min-height: 100vh; gap: 24px;
-    padding: 32px;
+    font-family: 'Share Tech Mono', ui-monospace, monospace;
+    background: #010812;
+    color: #e0f4ff;
+    min-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
-  h1 { font-size: 1.4rem; color: #c9a84c; letter-spacing: 0.05em; }
-  #status {
-    font-size: 1.1rem; color: #aaa; min-height: 1.5em; text-align: center;
+
+  /* ── Scrolling grid bg ── */
+  .grid-bg {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.04) 1px, transparent 1px);
+    background-size: 80px 80px;
+    animation: grid-scroll 8s linear infinite;
   }
-  #transcript {
-    font-size: 1.3rem; color: #fff; min-height: 2em; text-align: center;
-    max-width: 640px; line-height: 1.6;
-    border: 1px solid #333; border-radius: 8px; padding: 16px 24px;
-    background: #111; width: 100%;
+  .radial-bg {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,40,80,0.55) 0%, transparent 70%);
   }
-  #interim { color: #888; font-style: italic; }
-  button {
-    padding: 14px 40px; font-size: 1rem; border: none; border-radius: 8px;
-    cursor: pointer; font-weight: 600; letter-spacing: 0.04em;
-    transition: all 0.2s;
+
+  /* ── HUD top bar ── */
+  .hud-bar {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.85rem 2rem;
+    border-bottom: 1px solid rgba(0,212,255,0.12);
+    background: rgba(0,5,20,0.6);
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
   }
-  #btnListen { background: #4a1942; color: #fff; }
-  #btnListen.listening { background: #c0392b; animation: pulse 1s infinite; }
-  #btnSend { background: #27ae60; color: #fff; display: none; }
-  #btnRetry { background: #333; color: #aaa; display: none; }
-  @keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,0.5); }
-    50% { box-shadow: 0 0 0 10px rgba(192,57,43,0); }
+  .hud-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #00d4ff; box-shadow: 0 0 10px #00d4ff;
+    animation: hud-blink 2s ease-in-out infinite;
   }
-  .row { display: flex; gap: 12px; }
-  #note { font-size: 0.8rem; color: #555; text-align: center; }
+  .hud-title { font-size: 0.8rem; letter-spacing: 0.16em; color: #00d4ff; opacity: 0.85; margin-left: 0.75rem; }
+  .hud-time  { font-size: 0.7rem; color: rgba(0,212,255,0.5); letter-spacing: 0.08em; }
+
+  /* ── Body layout ── */
+  .main-layout {
+    position: relative; z-index: 5;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ── Center panel ── */
+  .center {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2rem; padding: 2rem;
+  }
+
+  /* ── Orb ── */
+  .orb-wrap { position: relative; width: 220px; height: 220px; }
+
+  .ring-outer {
+    position: absolute; border-radius: 50%;
+    border: 1px dashed rgba(0,212,255,0.3);
+    width: 260px; height: 260px;
+    top: 50%; left: 50%; transform: translate(-50%,-50%);
+    animation: spin-slow 18s linear infinite;
+  }
+  .ring-arc {
+    position: absolute; border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: rgba(0,212,255,0.7);
+    border-right-color: rgba(0,212,255,0.2);
+    width: 250px; height: 250px;
+    top: 50%; left: 50%; transform: translate(-50%,-50%);
+    animation: spin-arc 3s linear infinite;
+  }
+  .scan-ring {
+    position: absolute; border-radius: 50%;
+    border: 1px solid rgba(0,212,255,0.5);
+    top: 50%; left: 50%; transform: translate(-50%,-50%);
+    opacity: 0; pointer-events: none;
+  }
+  .scan-ring.r1 { width: 240px; height: 240px; animation: scan 2.8s ease-out 0s infinite; }
+  .scan-ring.r2 { width: 280px; height: 280px; animation: scan 2.8s ease-out 0.7s infinite; }
+  .scan-ring.r3 { width: 320px; height: 320px; animation: scan 2.8s ease-out 1.4s infinite; }
+  .scan-ring.hidden { animation: none !important; opacity: 0 !important; }
+
+  .orb {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: rgba(0,212,255,0.07);
+    border: 2px solid rgba(0,212,255,0.35);
+    box-shadow: 0 0 60px rgba(0,212,255,0.12), 0 0 120px rgba(0,212,255,0.05);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.4rem; cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    animation: breathe 3s ease-in-out infinite;
+    user-select: none;
+  }
+  .orb:hover { filter: brightness(1.15); }
+  .orb.listening {
+    background: rgba(0,212,255,0.13);
+    border-color: rgba(0,212,255,0.85);
+    box-shadow: 0 0 80px rgba(0,212,255,0.4), 0 0 160px rgba(0,212,255,0.15);
+    animation: none;
+  }
+  .orb.sending {
+    background: rgba(16,185,129,0.13);
+    border-color: rgba(16,185,129,0.8);
+    box-shadow: 0 0 80px rgba(16,185,129,0.3), 0 0 160px rgba(16,185,129,0.1);
+    animation: none;
+  }
+  .orb.error {
+    background: rgba(248,113,113,0.1);
+    border-color: rgba(248,113,113,0.7);
+    box-shadow: 0 0 60px rgba(248,113,113,0.25);
+    animation: none;
+  }
+
+  .orb-icon  { font-size: 2.5rem; line-height: 1; pointer-events: none; }
+  .orb-label {
+    font-size: 0.58rem; letter-spacing: 0.14em; font-weight: 700;
+    color: #00d4ff; pointer-events: none;
+    transition: color 0.2s;
+  }
+  .orb.listening .orb-label { color: #00d4ff; }
+  .orb.sending   .orb-label { color: #10b981; }
+  .orb.error     .orb-label { color: #f87171; }
+
+  /* ── Wave bars ── */
+  .wave-bars {
+    display: flex; align-items: center; gap: 3px; height: 32px;
+  }
+  .wave-bar {
+    width: 3px; border-radius: 2px;
+    background: rgba(0,212,255,0.18);
+    transition: height 0.1s ease, background 0.2s;
+    height: 4px;
+  }
+  .wave-bars.active .wave-bar {
+    background: rgba(0,212,255,0.6);
+    animation: wave 0.6s ease-in-out infinite alternate;
+  }
+
+  /* ── Transcript box ── */
+  .transcript-box {
+    max-width: 460px; width: 100%; text-align: center;
+    font-size: 1rem; line-height: 1.6; color: #e0f4ff;
+    background: rgba(0,212,255,0.04);
+    border: 1px solid rgba(0,212,255,0.12);
+    border-radius: 0.6rem; padding: 0.7rem 1.2rem;
+    min-height: 3.2rem;
+    transition: border-color 0.2s, opacity 0.2s;
+  }
+  .transcript-box.empty { color: rgba(255,255,255,0.2); border-color: transparent; background: transparent; }
+  #interim-span { color: rgba(0,212,255,0.5); font-style: italic; }
+
+  /* ── Action buttons ── */
+  .actions { display: flex; gap: 0.75rem; }
+  .btn {
+    padding: 0.5rem 1.4rem; font-size: 0.7rem; letter-spacing: 0.1em;
+    border: 1px solid; border-radius: 0.4rem; cursor: pointer;
+    font-family: inherit; font-weight: 700; transition: all 0.15s;
+    background: rgba(0,0,0,0.4);
+  }
+  .btn-send  { border-color: rgba(16,185,129,0.6); color: #10b981; display: none; }
+  .btn-retry { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.35); display: none; }
+  .btn:hover { filter: brightness(1.2); }
+
+  /* ── Hint ── */
+  .hint {
+    font-size: 0.6rem; color: rgba(0,212,255,0.3);
+    letter-spacing: 0.12em; text-align: center;
+    min-height: 1em;
+  }
+
+  /* ── Right log panel ── */
+  .log-panel {
+    width: 340px; flex-shrink: 0;
+    border-left: 1px solid rgba(0,212,255,0.1);
+    background: rgba(0,5,18,0.75);
+    backdrop-filter: blur(16px);
+    display: flex; flex-direction: column;
+  }
+  .log-header {
+    padding: 0.8rem 1.1rem;
+    border-bottom: 1px solid rgba(0,212,255,0.1);
+    display: flex; align-items: center; gap: 0.55rem;
+    flex-shrink: 0;
+  }
+  .log-pulse {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #00d4ff; box-shadow: 0 0 6px #00d4ff;
+    animation: pulse-dot 1.6s ease-in-out infinite;
+  }
+  .log-title { font-size: 0.68rem; letter-spacing: 0.14em; color: rgba(0,212,255,0.65); }
+  .log-count { margin-left: auto; font-size: 0.58rem; color: rgba(255,255,255,0.18); }
+
+  .log-entries {
+    flex: 1; overflow-y: auto; padding: 0.7rem;
+    display: flex; flex-direction: column; gap: 0.45rem;
+    scrollbar-width: thin; scrollbar-color: rgba(0,212,255,0.15) transparent;
+  }
+  .log-empty {
+    color: rgba(255,255,255,0.13); font-size: 0.68rem;
+    text-align: center; margin-top: 3rem; letter-spacing: 0.1em; line-height: 2;
+  }
+  .log-entry {
+    padding: 0.4rem 0.55rem;
+    border-radius: 0.3rem;
+    background: rgba(0,212,255,0.03);
+    border: 1px solid rgba(0,212,255,0.07);
+    animation: log-in 0.18s ease-out;
+  }
+  .log-meta { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 2px; }
+  .log-role { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.1em; }
+  .log-ts   { font-size: 0.52rem; color: rgba(255,255,255,0.18); margin-left: auto; }
+  .log-msg  { font-size: 0.7rem; color: rgba(224,244,255,0.78); line-height: 1.45; word-break: break-word; }
+
+  .log-footer {
+    padding: 0.55rem 1.1rem;
+    border-top: 1px solid rgba(0,212,255,0.1);
+    display: flex; align-items: center; gap: 0.8rem;
+    font-size: 0.58rem; color: rgba(0,212,255,0.28); flex-shrink: 0;
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.12); transition: all 0.3s; }
+  .status-dot.on { background: #00d4ff; box-shadow: 0 0 6px #00d4ff; animation: pulse-dot 1.2s ease-in-out infinite; }
+  .btn-clear {
+    margin-left: auto; background: none; border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 3px; padding: 2px 8px; color: rgba(255,255,255,0.22);
+    cursor: pointer; font-size: 0.58rem; font-family: inherit; letter-spacing: 0.08em;
+  }
+
+  /* ── HUD corners ── */
+  .corner { position: fixed; width: 28px; height: 28px; pointer-events: none; z-index: 20; border-color: rgba(0,212,255,0.45); }
+  .c-bl { bottom: 0; left: 0; border-bottom: 2px solid; border-left: 2px solid; }
+  .c-br { bottom: 0; right: 0; border-bottom: 2px solid; border-right: 2px solid; }
+
+  /* ── Keyframes ── */
+  @keyframes grid-scroll { 0% { background-position: 0 0; } 100% { background-position: 0 80px; } }
+  @keyframes hud-blink   { 0%,100%{opacity:0.4} 50%{opacity:1} }
+  @keyframes breathe     { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+  @keyframes spin-slow   { from{transform:translate(-50%,-50%) rotate(0deg)} to{transform:translate(-50%,-50%) rotate(360deg)} }
+  @keyframes spin-arc    { from{transform:translate(-50%,-50%) rotate(0deg)} to{transform:translate(-50%,-50%) rotate(360deg)} }
+  @keyframes scan        { 0%{opacity:0.65;transform:translate(-50%,-50%) scale(0.8)} 100%{opacity:0;transform:translate(-50%,-50%) scale(2)} }
+  @keyframes pulse-dot   { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.45;transform:scale(1.5)} }
+  @keyframes wave        { 0%{transform:scaleY(0.35)} 100%{transform:scaleY(1)} }
+  @keyframes log-in      { from{opacity:0;transform:translateX(10px)} to{opacity:1;transform:translateX(0)} }
 </style>
 </head>
 <body>
-<h1>🎤 Voice Agent</h1>
-<div id="status">Click Listen to start</div>
-<div id="transcript"><span id="final"></span><span id="interim"></span></div>
-<div class="row">
-  <button id="btnListen" onclick="startListening()">Listen</button>
-  <button id="btnSend" onclick="sendText()">Send ✓</button>
-  <button id="btnRetry" onclick="retry()">Retry</button>
+
+<div class="grid-bg"></div>
+<div class="radial-bg"></div>
+
+<!-- HUD bar -->
+<div class="hud-bar">
+  <div style="display:flex;align-items:center;gap:0.7rem">
+    <div class="hud-dot"></div>
+    <span class="hud-title">VOICE INTERFACE</span>
+  </div>
+  <span class="hud-time" id="clock"></span>
 </div>
-<p id="note">This tab will close automatically after sending.</p>
+
+<!-- Main layout -->
+<div class="main-layout">
+
+  <!-- Center -->
+  <div class="center">
+
+    <!-- Orb -->
+    <div class="orb-wrap" id="orbWrap">
+      <div class="scan-ring r1 hidden" id="sr1"></div>
+      <div class="scan-ring r2 hidden" id="sr2"></div>
+      <div class="scan-ring r3 hidden" id="sr3"></div>
+      <div class="ring-outer"></div>
+      <div class="ring-arc" id="arcRing"></div>
+      <div class="orb" id="orb" onclick="orbClick()">
+        <div class="orb-icon" id="orbIcon">🎙</div>
+        <div class="orb-label" id="orbLabel">TAP TO SPEAK</div>
+      </div>
+    </div>
+
+    <!-- Wave bars -->
+    <div class="wave-bars" id="waveBars">
+      ${[3,6,9,7,12,8,5,10,6,4,11,7,9,5,8].map((h,i)=>
+        `<div class="wave-bar" style="height:${h*0.5}px;animation-delay:${i*0.04}s;animation-duration:${0.55+i*0.07}s"></div>`
+      ).join('')}
+    </div>
+
+    <!-- Transcript -->
+    <div class="transcript-box empty" id="transcriptBox">
+      <span id="final-span"></span><span id="interim-span"></span>
+      <span id="placeholder" style="color:rgba(255,255,255,0.2)">Awaiting voice input…</span>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn btn-send"  id="btnSend"  onclick="sendText()">SEND ✓</button>
+      <button class="btn btn-retry" id="btnRetry" onclick="retry()">RETRY</button>
+    </div>
+
+    <!-- Hint -->
+    <div class="hint" id="hint">CLICK ORB OR PRESS SPACE TO ACTIVATE</div>
+  </div>
+
+  <!-- Log panel -->
+  <div class="log-panel">
+    <div class="log-header">
+      <div class="log-pulse"></div>
+      <span class="log-title">SESSION LOG</span>
+      <span class="log-count" id="logCount">0 ENTRIES</span>
+    </div>
+    <div class="log-entries" id="logEntries">
+      <div class="log-empty" id="logEmpty">NO LOGS YET<br><span style="opacity:.5">Activate voice to begin</span></div>
+    </div>
+    <div class="log-footer">
+      <div class="status-dot" id="micDot"></div><span>MIC</span>
+      <div class="status-dot" id="sendDot"></div><span>SEND</span>
+      <button class="btn-clear" onclick="clearLogs()">CLEAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- HUD corners -->
+<div class="corner c-bl"></div>
+<div class="corner c-br"></div>
+
 <script>
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recog, finalText = "";
+let recog, finalText = "", autoSendTimer = null;
+let audioCtx = null, analyser = null, micStream = null, rafId = null;
+let logCount = 0;
+const ROLE_COLOR = {
+  YOU:'#00d4ff', SYS:'#94a3b8', OK:'#10b981', ERR:'#f87171',
+  'SNR-DEV':'#06b6d4', 'JNR-DEV':'#4ade80', ORCHESTRATOR:'#a78bfa',
+  ARCHITECT:'#f59e0b', GUARDRAILS:'#f87171', KEYPOOL:'#64748b',
+  RESEARCH:'#38bdf8', RESOURCER:'#818cf8', UIUX:'#e879f9',
+  'VOICE-INTENT':'#c084fc', 'SCOPE-VALIDATOR':'#fb923c',
+  'IMAGE-GEN':'#34d399', PREVIEW:'#22d3ee', '→':'#475569',
+};
 
+// ── Clock ──────────────────────────────────────────────────────────────────────
+function tickClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+tickClock(); setInterval(tickClock, 1000);
+
+// ── Logging ────────────────────────────────────────────────────────────────────
+function addLog(role, msg) {
+  const container = document.getElementById('logEntries');
+  const empty = document.getElementById('logEmpty');
+  if (empty) empty.remove();
+  logCount++;
+  document.getElementById('logCount').textContent = logCount + ' ENTRIES';
+
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML =
+    '<div class="log-meta">' +
+    '<span class="log-role" style="color:' + (ROLE_COLOR[role]||'#94a3b8') + '">[' + role + ']</span>' +
+    '<span class="log-ts">' + ts + '</span>' +
+    '</div>' +
+    '<div class="log-msg">' + escHtml(msg) + '</div>';
+  container.appendChild(entry);
+  container.scrollTop = container.scrollHeight;
+}
+function clearLogs() {
+  logCount = 0;
+  document.getElementById('logCount').textContent = '0 ENTRIES';
+  document.getElementById('logEntries').innerHTML =
+    '<div class="log-empty" id="logEmpty">NO LOGS YET<br><span style="opacity:.5">Activate voice to begin</span></div>';
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Phase management ───────────────────────────────────────────────────────────
+function setPhase(phase) {
+  const orb     = document.getElementById('orb');
+  const icon    = document.getElementById('orbIcon');
+  const label   = document.getElementById('orbLabel');
+  const hint    = document.getElementById('hint');
+  const arcs    = ['sr1','sr2','sr3'];
+  const micDot  = document.getElementById('micDot');
+  const sendDot = document.getElementById('sendDot');
+  const arcRing = document.getElementById('arcRing');
+  const wave    = document.getElementById('waveBars');
+
+  orb.className = 'orb ' + (phase === 'idle' ? '' : phase);
+  arcs.forEach(id => {
+    const el = document.getElementById(id);
+    if (phase === 'idle') el.classList.add('hidden');
+    else el.classList.remove('hidden');
+  });
+
+  micDot.className  = 'status-dot' + (phase === 'listening' ? ' on' : '');
+  sendDot.className = 'status-dot' + (phase === 'sending'   ? ' on' : '');
+
+  if (phase === 'listening') {
+    icon.textContent  = '🔴';
+    label.textContent = 'RECORDING…';
+    hint.textContent  = 'SPEAK NOW · CLICK TO CANCEL';
+    wave.classList.add('active');
+    arcRing.style.animationDuration = '1.5s';
+  } else if (phase === 'sending') {
+    icon.textContent  = '✅';
+    label.textContent = 'SENDING…';
+    hint.textContent  = 'ROUTING TO REPL…';
+    wave.classList.remove('active');
+    arcRing.style.animationDuration = '1s';
+  } else if (phase === 'error') {
+    icon.textContent  = '⚠';
+    label.textContent = 'ERROR';
+    hint.textContent  = 'CLICK TO TRY AGAIN';
+    wave.classList.remove('active');
+    arcRing.style.animationDuration = '3s';
+  } else {
+    icon.textContent  = '🎙';
+    label.textContent = 'TAP TO SPEAK';
+    hint.textContent  = 'CLICK ORB OR PRESS SPACE TO ACTIVATE';
+    wave.classList.remove('active');
+    arcRing.style.animationDuration = '3s';
+  }
+}
+
+// ── Audio level meter ──────────────────────────────────────────────────────────
+async function startMeter() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx  = new AudioContext();
+    const src = audioCtx.createMediaStreamSource(micStream);
+    analyser  = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const bars = document.querySelectorAll('.wave-bar');
+
+    const tick = () => {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      const level = avg / 128; // 0-2
+
+      // Scale orb slightly
+      const orb = document.getElementById('orb');
+      orb.style.transform = 'scale(' + (1 + Math.min(level * 0.18, 0.28)) + ')';
+
+      // Drive wave bars with frequency data
+      bars.forEach((bar, i) => {
+        const idx = Math.floor(i / bars.length * data.length * 0.5);
+        const h = Math.max(4, (data[idx] / 255) * 28);
+        bar.style.height = h + 'px';
+      });
+
+      rafId = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch(e) {
+    addLog('SYS', 'Mic access blocked — ' + e.message);
+  }
+}
+function stopMeter() {
+  cancelAnimationFrame(rafId);
+  micStream?.getTracks().forEach(t => t.stop());
+  micStream = null;
+  audioCtx?.close(); audioCtx = null; analyser = null;
+  document.getElementById('orb').style.transform = '';
+  document.querySelectorAll('.wave-bar').forEach(b => b.style.height = '4px');
+}
+
+// ── Transcript box helpers ─────────────────────────────────────────────────────
+function setTranscript(fin, int_) {
+  const box = document.getElementById('transcriptBox');
+  const ph  = document.getElementById('placeholder');
+  document.getElementById('final-span').textContent   = fin;
+  document.getElementById('interim-span').textContent = int_;
+  if (fin || int_) {
+    box.classList.remove('empty');
+    if (ph) ph.style.display = 'none';
+  } else {
+    box.classList.add('empty');
+    if (ph) ph.style.display = '';
+  }
+}
+
+// ── Speech recognition ────────────────────────────────────────────────────────
 function startListening() {
+  if (!SpeechRecognition) {
+    addLog('ERR', 'Speech API not supported — use Chrome or Edge');
+    return;
+  }
   finalText = "";
-  document.getElementById("final").textContent = "";
-  document.getElementById("interim").textContent = "";
-  document.getElementById("btnSend").style.display = "none";
+  setTranscript('', '');
+  document.getElementById("btnSend").style.display  = "none";
   document.getElementById("btnRetry").style.display = "none";
+  setPhase('listening');
+  addLog('SYS', 'Listening… speak your command');
+  startMeter();
 
   recog = new SpeechRecognition();
   recog.lang = "en-US";
@@ -1639,67 +2120,117 @@ function startListening() {
   recog.continuous = false;
   recog.maxAlternatives = 1;
 
-  recog.onstart = () => {
-    document.getElementById("status").textContent = "🔴 Listening…";
-    document.getElementById("btnListen").classList.add("listening");
-    document.getElementById("btnListen").textContent = "Listening…";
-  };
   recog.onresult = (e) => {
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
       else interim += e.results[i][0].transcript;
     }
-    document.getElementById("final").textContent = finalText;
-    document.getElementById("interim").textContent = interim;
+    setTranscript(finalText, interim);
   };
   recog.onend = () => {
-    document.getElementById("btnListen").classList.remove("listening");
-    document.getElementById("btnListen").textContent = "Listen";
+    stopMeter();
     if (finalText.trim()) {
-      document.getElementById("status").textContent = "✓ Got it — send or retry";
-      document.getElementById("btnSend").style.display = "";
+      addLog('YOU', finalText.trim());
+      setPhase('idle');
+      document.getElementById("btnSend").style.display  = "";
       document.getElementById("btnRetry").style.display = "";
+      document.getElementById('hint').textContent = 'SENDING IN 1.5s… CLICK SEND TO CONFIRM';
+      autoSendTimer = setTimeout(() => sendText(), 1500);
     } else {
-      document.getElementById("status").textContent = "Nothing heard — try again";
+      addLog('SYS', 'Nothing heard — try again');
+      setPhase('idle');
       document.getElementById("btnRetry").style.display = "";
     }
   };
   recog.onerror = (e) => {
-    document.getElementById("status").textContent = "Error: " + e.error;
-    document.getElementById("btnListen").classList.remove("listening");
-    document.getElementById("btnListen").textContent = "Listen";
+    stopMeter();
+    addLog('ERR', 'Mic error: ' + e.error);
+    setPhase('error');
     document.getElementById("btnRetry").style.display = "";
+    setTimeout(() => setPhase('idle'), 3000);
   };
   recog.start();
 }
 
+function orbClick() {
+  const phase = document.getElementById('orb').classList.contains('listening') ? 'listening'
+              : document.getElementById('orb').classList.contains('sending')   ? 'sending'
+              : 'idle';
+  if (phase === 'listening') { recog?.stop(); stopMeter(); }
+  else if (phase === 'idle') startListening();
+}
+
 async function sendText() {
+  if (autoSendTimer) { clearTimeout(autoSendTimer); autoSendTimer = null; }
   const text = finalText.trim();
   if (!text) return;
-  document.getElementById("status").textContent = "Sending…";
-  await fetch("/voice-result", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text })
-  });
-  document.getElementById("status").textContent = "✓ Sent! You can close this tab.";
-  document.getElementById("btnSend").style.display = "none";
+  setPhase('sending');
+  addLog('SYS', 'Routing to REPL…');
+  document.getElementById("btnSend").style.display  = "none";
   document.getElementById("btnRetry").style.display = "none";
-  setTimeout(() => window.close(), 800);
+  try {
+    const r = await fetch("http://localhost:3002/voice-result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    addLog('OK', 'Sent ✓ — listening for REPL response…');
+    finalText = "";
+    setTranscript('', '');
+    setPhase('idle');
+    // Re-arm after a short pause so user can speak again
+    setTimeout(() => startListening(), 1200);
+  } catch(e) {
+    addLog('ERR', 'Send failed: ' + e.message);
+    setPhase('error');
+    document.getElementById("btnRetry").style.display = "";
+    setTimeout(() => setPhase('idle'), 3000);
+  }
 }
 
 function retry() {
+  if (autoSendTimer) { clearTimeout(autoSendTimer); autoSendTimer = null; }
   finalText = "";
-  document.getElementById("final").textContent = "";
-  document.getElementById("interim").textContent = "";
-  document.getElementById("btnSend").style.display = "none";
+  setTranscript('', '');
+  document.getElementById("btnSend").style.display  = "none";
   document.getElementById("btnRetry").style.display = "none";
-  document.getElementById("status").textContent = "Click Listen to start";
+  setPhase('idle');
+  addLog('SYS', 'Retrying…');
+  startListening();
 }
 
-// Auto-start listening on load
-window.onload = () => startListening();
+// ── SSE — stream REPL logs into the panel ────────────────────────────────────
+function connectLogStream() {
+  const src = new EventSource('http://localhost:3002/log-stream');
+  src.onopen = () => addLog('SYS', 'REPL log stream connected');
+  src.onmessage = (e) => {
+    try {
+      const { role, message } = JSON.parse(e.data);
+      addLog(role, message);
+    } catch {}
+  };
+  src.onerror = () => {
+    // SSE auto-reconnects; just show a brief note if it drops
+    addLog('SYS', 'Log stream reconnecting…');
+  };
+}
+
+// Space bar shortcut
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !e.repeat) {
+    e.preventDefault();
+    orbClick();
+  }
+});
+
+// Auto-start
+window.onload = () => {
+  addLog('SYS', 'Voice interface ready');
+  connectLogStream();
+  startListening();
+};
 </script>
 </body>
 </html>`);
@@ -1715,11 +2246,87 @@ window.onload = () => startListening();
         res.end("ok");
         try {
           const { text } = JSON.parse(body);
-          if (_pendingVoiceResolve && text?.trim()) {
-            _pendingVoiceResolve(text.trim());
-            _pendingVoiceResolve = null;
+          const trimmed = text?.trim();
+          if (trimmed) {
+            process.stderr.write(`${C.magenta}[voice-agent] received: "${trimmed}"${C.reset}\n`);
+            _voiceEvents.emit("transcription", trimmed);
           }
-        } catch { /* ignore malformed */ }
+        } catch (e) {
+          process.stderr.write(`[voice-agent] parse error: ${e.message}\n`);
+        }
+      });
+      return;
+    }
+
+    // ── POST /voice-edit — 3-stage voice editing pipeline ────────────────────────
+    // Stage 1: VOICE-INTENT classifies the command into structured JSON
+    // Stage 2: SCOPE-VALIDATOR strips unsafe edits, produces constrainedPrompt
+    // Stage 3: dispatchVoiceEdit() applies directly (regex) or routes to UIUX/JNR-DEV
+    if (req.method === "POST" && req.url === "/voice-edit") {
+      let body = "";
+      req.on("data", d => { body += d; });
+      req.on("end", async () => {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+
+        let prompt = "";
+        try { prompt = JSON.parse(body).prompt?.trim() ?? ""; } catch {}
+        if (!prompt) { res.end("[error] empty prompt"); return; }
+
+        try {
+          const cssPath     = path.join(GENERATED_SITE, "src", "app", "globals.css");
+          const contentPath = path.join(GENERATED_SITE, "src", "app", "site-content.ts");
+          const cssSource     = existsSync(cssPath)     ? readFileSync(cssPath, "utf-8")     : "";
+          const contentSource = existsSync(contentPath) ? readFileSync(contentPath, "utf-8") : "";
+
+          // Strip imageUrl lines — LLM must never see or touch them
+          const safeContent = contentSource.split("\n").filter(l => !l.includes("imageUrl")).join("\n");
+          const rootMatch   = cssSource.match(/:root\s*\{[^}]+\}/s);
+          const rootBlock   = rootMatch ? rootMatch[0] : "(no :root found)";
+
+          // ── Stage 1: VOICE-INTENT ─────────────────────────────────────────────
+          const intent = await runVoiceIntentAgent(prompt, rootBlock, safeContent);
+          res.write(`[VOICE-INTENT] intent=${intent.intent} agent=${intent.agent} confidence=${intent.confidence}\n`);
+
+          if (intent.intent === "unknown" || intent.confidence < 0.5) {
+            res.end(`[voice-edit] Could not understand: "${prompt}" — try rephrasing.`);
+            return;
+          }
+
+          // ── Stage 2: SCOPE-VALIDATOR ──────────────────────────────────────────
+          const validated = await runScopeValidator(intent, rootBlock, safeContent);
+          res.write(`[SCOPE-VALIDATOR] approved=${validated.approved} agentRequired=${validated.agentRequired}\n`);
+
+          if (validated.blockedEdits?.length > 0) {
+            for (const b of validated.blockedEdits) {
+              res.write(`[BLOCKED] ${JSON.stringify(b.edit)} — ${b.reason}\n`);
+            }
+          }
+
+          if (!validated.approved) {
+            res.end(`[voice-edit] Blocked: ${validated.reason}`);
+            return;
+          }
+
+          // ── Fallback: scope-validator approved but returned empty safeEdits ──
+          // llama-3.3-70b sometimes returns the edits under "edits" not "safeEdits",
+          // or returns an empty array despite approving. Trust intent.edits directly
+          // for direct css-patch / content-patch when the validator gave us nothing.
+          if (
+            validated.agentRequired === "direct" &&
+            (!validated.safeEdits || validated.safeEdits.length === 0) &&
+            intent.edits?.length > 0
+          ) {
+            res.write(`[voice-edit] scope-validator returned empty safeEdits — using intent.edits directly\n`);
+            validated.safeEdits = intent.edits;
+          }
+
+          // ── Stage 3: Dispatch ─────────────────────────────────────────────────
+          await dispatchVoiceEdit(validated, cssPath, contentPath, res);
+          res.end(`\n[done]`);
+
+        } catch (e) {
+          res.end(`[error] ${e.message}`);
+        }
       });
       return;
     }
@@ -1794,58 +2401,168 @@ function detectRoleFromToolName(toolName) {
   return null;
 }
 
-// ── Shared Groq chat helper — uses key pool with automatic 429 rotation ────────
+// ── Per-model cooldown tracking (separate from global key cooldowns) ─────────
+// Key: "label:model", Value: cooldownUntil timestamp
+// This lets callGroq try model fallbacks on the same key before giving up.
+const _modelCooldowns = new Map();
+
+function isModelReady(entry, model) {
+  return Date.now() > (_modelCooldowns.get(`${entry.label}:${model}`) ?? 0);
+}
+function coolModel(entry, model, headers) {
+  const retryAfter = parseInt(headers?.get?.("retry-after") ?? "60", 10);
+  const secs = isNaN(retryAfter) ? 60 : Math.max(retryAfter, 5);
+  _modelCooldowns.set(`${entry.label}:${model}`, Date.now() + secs * 1000);
+  entry.errors++;
+  logEvent("KEYPOOL", `${entry.label}/${model.split("/").pop().slice(0,24)} rate-limited — cooldown ${secs}s`, "🔴", C.red);
+}
+
+// Ordered fallback list — each has its own TPD quota on Groq free tier:
+// llama-3.3-70b: 100k TPD | llama-4-scout: 500k TPD | llama-3.1-8b: 500k TPD
+const CALLGROQ_MODELS = [
+  "llama-3.3-70b-versatile",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+  "llama-3.1-8b-instant",
+];
+
+// Round-robin cursor for callGroq (separate from getKey cursor)
+let _callGroqIdx = 0;
+
+// ── Shared Groq chat helper — per-model cooldowns + Gemini fallback ───────────
 async function callGroq(systemPrompt, userMessage, maxTokens = 1200, temperature = 0.7) {
-  const GROQ_MODEL = "llama-3.3-70b-versatile";
+  const TIMEOUT_MS = 20_000; // 20-second hard timeout per attempt
   let lastErr;
 
-  // Try every key in the pool (round-robin + fallback on 429)
-  for (let attempt = 0; attempt < KEY_POOL.length * 2; attempt++) {
-    const entry = await getKey();
-    logEvent("KEYPOOL", `Using ${entry.label} (uses:${entry.uses})`, "🔑", C.dim);
-
-    let r;
-    try {
-      r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${entry.key}` },
-        body: JSON.stringify({
-          model: GROQ_MODEL,
-          max_tokens: Math.min(maxTokens, 4096),
-          temperature,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
-          ],
-        }),
-      });
-    } catch (netErr) {
-      lastErr = netErr;
-      logEvent("KEYPOOL", `${entry.label} network error: ${netErr.message}`, "⚠️", C.red);
+  // ── Try each Groq model in turn (separate TPD quota per model) ───────────────
+  for (const model of CALLGROQ_MODELS) {
+    // Build round-robin ordered list of keys ready for this model
+    const readyKeys = [];
+    for (let i = 0; i < KEY_POOL.length; i++) {
+      const entry = KEY_POOL[(_callGroqIdx + i) % KEY_POOL.length];
+      if (isModelReady(entry, model)) readyKeys.push(entry);
+    }
+    if (readyKeys.length === 0) {
+      logEvent("KEYPOOL", `All keys exhausted for ${model.split("/").pop()} — trying next model`, "🔄", C.yellow);
       continue;
     }
 
-    if (r.status === 429) {
-      coolKey(entry, r.headers);
-      lastErr = new Error(`${entry.label} rate-limited`);
-      continue; // rotate to next key
-    }
+    for (const entry of readyKeys) {
+      // Advance cursor so the next callGroq call starts on a different key
+      _callGroqIdx = (KEY_POOL.indexOf(entry) + 1) % KEY_POOL.length;
+      logEvent("KEYPOOL", `Using ${entry.label}/${model.split("/").pop().slice(0,20)} (uses:${entry.uses})`, "🔑", C.dim);
 
-    const j = await r.json();
-    if (!r.ok) {
-      lastErr = new Error(`Groq ${r.status}: ${JSON.stringify(j).slice(0, 200)}`);
-      logEvent("KEYPOOL", `${entry.label} error ${r.status} — skipping`, "⚠️", C.red);
-      entry.errors++;
-      continue;
-    }
+      let r;
+      try {
+        r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${entry.key}` },
+          body: JSON.stringify({
+            model,
+            max_tokens: Math.min(maxTokens, 4096),
+            temperature,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userMessage },
+            ],
+          }),
+        });
+      } catch (netErr) {
+        lastErr = netErr;
+        const isTimeout = netErr.name === "TimeoutError" || netErr.name === "AbortError";
+        logEvent("KEYPOOL", `${entry.label} ${isTimeout ? "timed out (20s)" : "network error: " + netErr.message} — trying next`, "⚠️", C.red);
+        if (isTimeout) coolModel(entry, model, { get: () => "30" }); // back off on timeout too
+        continue;
+      }
 
-    entry.uses++;
-    let text = j.choices?.[0]?.message?.content?.trim() ?? "";
-    text = text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
-    return text;
+      if (r.status === 429) {
+        coolModel(entry, model, r.headers);
+        lastErr = new Error(`${entry.label}/${model} rate-limited`);
+        continue; // next key for this model
+      }
+
+      const j = await r.json();
+      if (!r.ok) {
+        lastErr = new Error(`Groq ${r.status}: ${JSON.stringify(j).slice(0, 200)}`);
+        logEvent("KEYPOOL", `${entry.label} error ${r.status} — skipping`, "⚠️", C.red);
+        entry.errors++;
+        continue;
+      }
+
+      entry.uses++;
+      let text = j.choices?.[0]?.message?.content?.trim() ?? "";
+      text = text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+      return text;
+    }
   }
 
-  throw lastErr ?? new Error("All Groq keys exhausted");
+  // ── All Groq models exhausted — Gemini 2.0 Flash fallback ────────────────────
+  const GEMINI_KEY = process.env.GEMINI_API_KEY?.trim();
+  if (GEMINI_KEY) {
+    logEvent("KEYPOOL", "All Groq models exhausted — falling back to Gemini 2.0 Flash", "🔄", C.yellow);
+    try {
+      const gr = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+        {
+          method: "POST",
+          signal: AbortSignal.timeout(25_000),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\n${userMessage}` }] }],
+            generationConfig: { maxOutputTokens: Math.min(maxTokens, 8192), temperature },
+          }),
+        }
+      );
+      if (gr.ok) {
+        const gj = await gr.json();
+        let text = gj.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+        text = text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+        logEvent("KEYPOOL", "Gemini 2.0 Flash fallback succeeded", "✅", C.green);
+        return text;
+      }
+      logEvent("KEYPOOL", `Gemini fallback HTTP ${gr.status}`, "⚠️", C.red);
+    } catch (ge) {
+      logEvent("KEYPOOL", `Gemini fallback error: ${ge.message}`, "⚠️", C.red);
+    }
+  }
+
+  // ── Last resort: wait for soonest (key, model) to recover, then retry once ───
+  let soonestMs = Infinity;
+  let soonestEntry = null;
+  let soonestModel = null;
+  for (const model of CALLGROQ_MODELS) {
+    for (const entry of KEY_POOL) {
+      const coolUntil = _modelCooldowns.get(`${entry.label}:${model}`) ?? 0;
+      if (coolUntil < soonestMs) { soonestMs = coolUntil; soonestEntry = entry; soonestModel = model; }
+    }
+  }
+  const wait = Math.max(0, soonestMs - Date.now());
+  if (soonestEntry && wait < 180_000) {
+    logEvent("KEYPOOL", `Waiting ${(wait / 1000).toFixed(1)}s for ${soonestEntry.label}/${soonestModel?.split("/").pop()} to recover…`, "⏳", C.red);
+    await new Promise(r => setTimeout(r, wait + 300));
+    _modelCooldowns.delete(`${soonestEntry.label}:${soonestModel}`);
+    // Single retry with recovered slot
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${soonestEntry.key}` },
+        body: JSON.stringify({
+          model: soonestModel,
+          max_tokens: Math.min(maxTokens, 4096),
+          temperature,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }],
+        }),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        soonestEntry.uses++;
+        let text = j.choices?.[0]?.message?.content?.trim() ?? "";
+        return text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+      }
+    } catch { /* fall through */ }
+  }
+
+  throw lastErr ?? new Error("All Groq models and keys exhausted");
 }
 
 // ── WEBSITE-BUILDER AGENT LOADER ──────────────────────────────────────────────
@@ -1905,6 +2622,150 @@ function loadAgentSystem(agentName) {
   throw new Error(`[agent-loader] No system prompt found for agent: ${agentName} (checked ${agentDir} for SOUL.md and SYSTEM.md)`);
 }
 
+// ── VOICE-INTENT AGENT — classifies voice command into structured JSON intent ───
+// Stage 1 of the voice-edit pipeline. No tool-calling, JSON output only.
+async function runVoiceIntentAgent(prompt, rootBlock, safeContent) {
+  const soul  = loadAgentContext(path.join(AGENTS_DIR_ROOT, "voice-intent"));
+  const USER  =
+    `Voice command: "${prompt}"\n\n` +
+    `Current :root CSS:\n${rootBlock}\n\n` +
+    `Current site-content.ts (imageUrls hidden):\n${safeContent.slice(0, 2000)}`;
+
+  logEvent("VOICE-INTENT", `Classifying: "${prompt}"`, "🎙", C.magenta);
+  const raw     = await callGroq(soul, USER, 400, 0.05);
+  const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+  try        { return JSON.parse(cleaned); }
+  catch      { return { intent: "unknown", confidence: 0, agent: "none", edits: [], description: raw.slice(0, 100) }; }
+}
+
+// ── SCOPE VALIDATOR — audits the intent, strips unsafe edits, writes constrainedPrompt ─
+// Stage 2 of the voice-edit pipeline. No tool-calling, JSON output only.
+async function runScopeValidator(intent, rootBlock, safeContent) {
+  const soul  = loadAgentContext(path.join(AGENTS_DIR_ROOT, "scope-validator"));
+  const USER  =
+    `Intent from VOICE-INTENT agent:\n${JSON.stringify(intent, null, 2)}\n\n` +
+    `Current :root CSS for validation:\n${rootBlock}\n\n` +
+    `Current site-content.ts (imageUrls hidden):\n${safeContent.slice(0, 2000)}`;
+
+  logEvent("SCOPE-VALIDATOR", `Validating intent="${intent.intent}" agent="${intent.agent}"`, "🛡", C.yellow);
+  const raw     = await callGroq(soul, USER, 500, 0.05);
+  const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+  try        { return JSON.parse(cleaned); }
+  catch      { return { approved: false, reason: `Validator returned non-JSON: ${raw.slice(0, 100)}`, safeEdits: [], blockedEdits: [], agentRequired: "none" }; }
+}
+
+// ── VOICE-EDIT DISPATCH — applies validated edits or routes to the right agent ─
+async function dispatchVoiceEdit(validated, cssPath, contentPath, res) {
+  const { agentRequired, safeEdits = [], constrainedPrompt = "" } = validated;
+
+  // ── Direct regex apply (css-var / content-text) ──────────────────────────────
+  if (agentRequired === "direct" || (!agentRequired && safeEdits.length > 0)) {
+    res.write(`[voice-edit] applying ${safeEdits.length} edit(s) directly\n`);
+    let cssSource     = existsSync(cssPath)     ? readFileSync(cssPath, "utf-8")     : "";
+    let contentSource = existsSync(contentPath) ? readFileSync(contentPath, "utf-8") : "";
+    let cssUpdated = false, contentUpdated = false;
+
+    for (const edit of safeEdits) {
+      if (edit.type === "css-var" && edit.var && edit.value) {
+        const re   = new RegExp(`(${edit.var.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}\\s*:\\s*)([^;]+)(;)`, "g");
+        const next = cssSource.replace(re, `$1${edit.value}$3`);
+        if (next !== cssSource) { cssSource = next; cssUpdated = true; res.write(`[UIUX] ${edit.var} → ${edit.value}\n`); }
+        else res.write(`[warn] CSS var "${edit.var}" not found in :root\n`);
+      } else if (edit.type === "content-text" && edit.field && edit.value !== undefined) {
+        const key  = edit.field.split(".").pop();
+        const re   = new RegExp(`(${key.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}\\s*:\\s*")([^"]*)(")`, "g");
+        const safe = String(edit.value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        const next = contentSource.replace(re, `$1${safe}$3`);
+        if (next !== contentSource) { contentSource = next; contentUpdated = true; res.write(`[JNR-DEV] ${edit.field} → "${edit.value}"\n`); }
+        else res.write(`[warn] field "${edit.field}" not found in site-content.ts\n`);
+      }
+    }
+
+    if (cssUpdated)     writeFileSync(cssPath,     cssSource,     "utf-8");
+    if (contentUpdated) writeFileSync(contentPath, contentSource, "utf-8");
+    if (!cssUpdated && !contentUpdated) {
+      res.write("[voice-edit] No matching fields found — try rephrasing.\n");
+    } else {
+      // Signal the browser to reload — Next.js HMR on Windows sometimes misses
+      // external writeFileSync changes, so we force a reload from the client side.
+      res.write("[reload]\n");
+    }
+    return;
+  }
+
+  // ── UIUX or JNR-DEV: run constrained agent query ─────────────────────────────
+  if ((agentRequired === "uiux" || agentRequired === "jnr-dev") && constrainedPrompt) {
+    const ceDir    = path.join(AGENTS_DIR_ROOT, "code-editor");
+    const soulFile = agentRequired === "uiux" ? "uiux-designer" : "jnr-developer";
+    const soul     = loadAgentContext(path.join(ceDir, "agents", soulFile));
+    const subRole  = agentRequired === "uiux" ? "UIUX" : "JNR-DEV";
+
+    logHandoff("SCOPE-VALIDATOR", subRole, constrainedPrompt);
+    emitRoleBanner(subRole);
+
+    const TOOL_MAP  = Object.fromEntries(TOOLS.map(t => [t.name, t]));
+    const pick      = (...names) => names.map(n => TOOL_MAP[n]).filter(Boolean);
+    const toolSet   = agentRequired === "uiux"
+      ? pick("file_read", "file_write", "append_memory")
+      : pick("file_read", "file_write");
+
+    // Inject concrete file paths so the agent always knows what to read/write
+    const enhancedPrompt =
+      `${constrainedPrompt}\n\n` +
+      `File paths for this edit:\n` +
+      `- CSS variables/theme: ${cssPath}\n` +
+      `- Site text content: ${contentPath}\n` +
+      `Use file_read to read the file first, then file_write to apply only the targeted change.`;
+
+    const sysPrompt = `${SYSTEM_PROMPT}\n\n== ACTIVE SUB-AGENT ==\n${soul}\n\n== SCOPE CONSTRAINT ==\nYou are making ONE targeted edit. Do NOT rewrite entire files. Do NOT touch imageUrls, layout variant indices, or any section not mentioned. Edit only what is described below.`;
+
+    const activeKey = await getKey();
+    process.env.GROQ_API_KEY = activeKey.key;
+    let agentWroteFile = false;
+
+    // Wrap file_write in this scope to track whether the agent actually wrote anything
+    const trackedToolSet = toolSet.map(t => {
+      if (t.name !== "file_write") return t;
+      return {
+        ...t,
+        handler: async (args, signal) => {
+          const result = await t.handler(args, signal);
+          if (!String(result).startsWith("BLOCKED")) agentWroteFile = true;
+          return result;
+        },
+      };
+    });
+
+    for await (const msg of query({
+      prompt:             enhancedPrompt,
+      dir:                __dirname,
+      model:              "groq:llama-3.3-70b-versatile",
+      tools:              trackedToolSet,
+      replaceBuiltinTools: true,
+      systemPrompt:       sysPrompt,
+      maxTurns:           8,
+      constraints:        { maxTokens: 2048 },
+    })) {
+      if (msg.type === "delta") { res.write(msg.content); process.stdout.write(msg.content); }
+    }
+    activeKey.uses++;
+
+    if (!agentWroteFile) {
+      res.write(`\n[warn] ${subRole} did not write any files — change may not have been applied. Try rephrasing as a direct color command (e.g. "make navbar text white").\n`);
+    }
+    return;
+  }
+
+  // ── Full pipeline (build intent) ─────────────────────────────────────────────
+  if (agentRequired === "full-pipeline" && constrainedPrompt) {
+    res.write("[ORCHESTRATOR] Building website via full pipeline…\n");
+    await buildWebsiteDirect(constrainedPrompt);
+    return;
+  }
+
+  res.write("[voice-edit] Could not dispatch — check your phrasing.\n");
+}
+
 // ── RESEARCH AGENT — discovers what this type of website needs ─────────────────
 // Returns JSON: { siteType, aesthetic, keyFeatures[], targetAudience,
 //                 designInspiration, variants:{navbar,hero,cards,features,cta,footer},
@@ -1933,10 +2794,12 @@ async function runResourcerAgent(research, userPrompt) {
   const aesthetic = research.aesthetic ?? "";
   const keywords  = (research.imageKeywords ?? []).join(", ");
   const SYSTEM = loadAgentSystem("resourcer-agent");
-  const text = await callGroq(SYSTEM, `Site: ${ userPrompt } \nAesthetic: ${ aesthetic } \nKeywords: ${ keywords } `, 400, 0.8);
+  const palette = JSON.stringify(research.colorPalette ?? {});
+  const text = await callGroq(SYSTEM, `Site: ${userPrompt}\nAesthetic: ${aesthetic}\nKeywords: ${keywords}\nResearch palette: ${palette}`, 600, 0.8);
   try {
     const res = JSON.parse(text);
-    logEvent("RESOURCER", `Image theme: "${res.imageTheme}" | Seeds: ${ res.heroSeed }, ${ res.cardSeeds?.join(",") } `, "", C.cyan);
+    const refined = res.refinedPalette ? ` | Refined bg:${res.refinedPalette.bg} primary:${res.refinedPalette.primary}` : "";
+    logEvent("RESOURCER", `Image theme: "${res.imageTheme}" | Seeds: ${res.heroSeed}, ${res.cardSeeds?.join(",")}${refined}`, "", C.cyan);
     return res;
   } catch (err) {
     logEvent("RESOURCER", `JSON parse failed. Raw: ${text.slice(0, 100).replace(/\\n/g, ' ')}...`, "", C.red);
@@ -2068,30 +2931,73 @@ async function runImageGenAgent(research, resources, ux, userPrompt) {
 
   const SYSTEM = loadAgentSystem("image-gen-agent");
 
-  const brief = `Brand: ${brand} | Type: ${siteType} | Aesthetic: ${aesthetic} | Theme: ${theme} | Cards: ${cards.map(c => c.title).join(', ')}`;
+  // Build a proper JSON spec matching the SKILL.md input contract
+  const spec = {
+    theme: theme,
+    vibe: aesthetic,
+    images: [
+      {
+        zone: "hero",
+        prompt_intent: `${brand} ${siteType} ${headline}`.trim().slice(0, 120),
+        width: 1920,
+        height: 1080,
+        style: `${aesthetic}, photorealistic`
+      },
+      ...cards.slice(0, 3).map((card, i) => ({
+        zone: "card",
+        prompt_intent: (card.title ?? `${brand} scene ${i + 1}`).slice(0, 100),
+        width: 800,
+        height: 600,
+        style: `${aesthetic}, cinematic`
+      })),
+      {
+        zone: "cta",
+        prompt_intent: `${brand} wide panoramic banner`.slice(0, 100),
+        width: 1440,
+        height: 600,
+        style: `${aesthetic}, cinematic color grade`
+      }
+    ],
+    animations: ["flicker", "float", "fade-in-up"]
+  };
 
   let prompts;
   try {
-    const raw = await callGroq(SYSTEM, brief, 600, 0.65);
-    // Robust extraction: try JSON.parse first, then regex fallback
+    const raw = await callGroq(SYSTEM, JSON.stringify(spec), 800, 0.65);
+
+    // Strip markdown code fences if present
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+
     let parsed;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(cleaned);
     } catch {
-      // Try to extract values even from malformed JSON using regex
-      const heroM = raw.match(/"heroPrompt"\s*:\s*"([^"]{5,200})"/);
-      const ctaM = raw.match(/"ctaPrompt"\s*:\s*"([^"]{5,200})"/);
-      const cardsM = [...raw.matchAll(/"([^"]{5,150})"/g)]
-        .map(m => m[1])
-        .filter(s => s !== 'heroPrompt' && s !== 'ctaPrompt' && s !== 'cardPrompts' && s.length > 10)
-        .slice(0, 3);
-      if (heroM) {
-        parsed = { heroPrompt: heroM[1], cardPrompts: cardsM, ctaPrompt: ctaM?.[1] ?? cardsM[0] ?? '' };
+      // Try to extract first JSON object from the raw text
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
       } else {
-        throw new Error('regex extraction also failed');
+        throw new Error("no JSON object found in response");
       }
     }
-    prompts = parsed;
+
+    // Handle SKILL.md output contract: { generated: [...] }
+    if (parsed.generated && Array.isArray(parsed.generated)) {
+      const heroEntry = parsed.generated.find(e => e.zone === "hero");
+      const cardEntries = parsed.generated.filter(e => e.zone === "card");
+      const ctaEntry = parsed.generated.find(e => e.zone === "cta");
+      prompts = {
+        heroPrompt: heroEntry?.prompt ?? heroEntry?.puter?.prompt ?? "",
+        cardPrompts: cardEntries.map(e => e.prompt ?? e.puter?.prompt ?? "").filter(Boolean),
+        ctaPrompt: ctaEntry?.prompt ?? ctaEntry?.puter?.prompt ?? "",
+      };
+    } else if (parsed.heroPrompt) {
+      // Backwards-compat: agent returned old flat format
+      prompts = parsed;
+    } else {
+      throw new Error("unrecognized response format");
+    }
+
     logEvent("IMAGE-GEN", `Hero: "${String(prompts.heroPrompt).slice(0, 70)}…"`, "", C.magenta);
     logEvent("IMAGE-GEN", `Cards: ${(prompts.cardPrompts ?? []).length} prompts generated`, "", C.magenta);
     logEvent("IMAGE-GEN", `CTA:   "${String(prompts.ctaPrompt).slice(0, 70)}…"`, "", C.magenta);
@@ -2099,9 +3005,13 @@ async function runImageGenAgent(research, resources, ux, userPrompt) {
     logEvent("IMAGE-GEN", `Prompt generation failed (${e.message}) — using theme fallback`, "", C.red);
     const base = theme.replace(/[^a-zA-Z0-9 ,\-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
     prompts = {
-      heroPrompt: `${base} - cinematic hero wide shot - dramatic lighting - ultra detailed`,
-      cardPrompts: [`${base} - scene one - photorealistic`, `${base} - scene two - cinematic`, `${base} - scene three - artistic`],
-      ctaPrompt: `${base} - wide panoramic banner - dramatic sky - cinematic color grade`,
+      heroPrompt: `${base} cinematic wide shot dramatic lighting photorealistic`,
+      cardPrompts: [
+        `${base} scene photorealistic cinematic`,
+        `${base} interior atmospheric cinematic`,
+        `${base} detail close-up artistic`
+      ],
+      ctaPrompt: `${base} wide panoramic banner dramatic cinematic`,
     };
   }
 
@@ -2377,11 +3287,11 @@ export default function PuterImageLoader() {
   writeFileSync(siteContentPath, siteContent, "utf-8");
   logEvent("SNR-DEV", `site-content.ts written (variants: nb=${v.navbar} hero=${v.hero} cards=${v.cards} feat=${v.features} cta=${v.cta} ft=${v.footer})`, "", C.cyan);
 
-  // ── Stage 4b: CSS :root from research palette ─────────────────────────────
-  logHandoff("SNR-DEV", "SNR-DEV", "writing globals.css :root");
-  const p = research.colorPalette ?? {};
-  const primary   = p.primary   ?? "#1a0a00";   // dark warm, not blue
-  const secondary = p.secondary ?? "#c9843a";   // warm amber, not blue/purple
+  // ── Stage 4b: CSS :root — resourcer refinedPalette takes priority over raw research ─
+  logHandoff("SNR-DEV", "SNR-DEV", "writing globals.css :root (interim — architect will finalize)");
+  const p = resources.refinedPalette ?? research.colorPalette ?? {};
+  const primary   = p.primary   ?? "#1a0a00";
+  const secondary = p.secondary ?? "#c9843a";
   const bg        = p.bg        ?? "#0a0805";
   const text      = p.text      ?? "#f0e8d8";
   const font      = resources.fontDisplay ?? research.fontDisplay ?? "'Inter', sans-serif";
@@ -2397,7 +3307,7 @@ export default function PuterImageLoader() {
   const onPrimary   = luminance(primary)   > 0.45 ? "#000000" : "#ffffff";
   const onSecondary = luminance(secondary) > 0.45 ? "#000000" : "#ffffff";
 
-  const rootBlock = `:root {\n  --color-primary: ${primary};\n  --color-secondary: ${secondary};\n  --color-bg: ${bg};\n  --color-text: ${text};\n  --color-on-primary: ${onPrimary};\n  --color-on-secondary: ${onSecondary};\n  --font-display: ${font};\n}`;
+  const rootBlock = `:root {\n  --color-primary: ${primary};\n  --color-secondary: ${secondary};\n  --color-bg: ${bg};\n  --color-text: ${text};\n  --color-nav-text: ${text};\n  --color-hero-text: ${text};\n  --color-on-primary: ${onPrimary};\n  --color-on-secondary: ${onSecondary};\n  --font-display: ${font};\n}`;
 
   // Full globals.css reset — replace :root in the canonical template.
   // This eliminates CSS residue (component-specific rules, old color overrides)
@@ -2409,26 +3319,53 @@ export default function PuterImageLoader() {
   writeFileSync(cssPath, newCss, "utf-8");
   logEvent("SNR-DEV", `globals.css — primary:${primary} secondary:${secondary}`, "", C.cyan);
 
-  // ── Stage 5: ARCHITECT generates 5 color variants for Template Library ────
-  logHandoff("SNR-DEV", "ARCHITECT", "generate 5 color variants for template library");
-  logEvent("ARCHITECT", "Generating 5 color themes…", "", C.yellow);
+  // ── Stage 5: ARCHITECT — generate 5 variants + choose active theme ───────
+  // Architect receives the full design brief (research + resourcer output) and:
+  // 1. Generates 5 visually distinct color variants for the template library
+  // 2. Sets "recommended":true on EXACTLY ONE — the variant that best fits user intent
+  // 3. That recommended variant overwrites globals.css as the final active theme
+  logHandoff("SNR-DEV", "ARCHITECT", "generate 5 color variants + choose active theme");
+  logEvent("ARCHITECT", "Generating 5 color themes + selecting active theme…", "", C.yellow);
   try {
+    const basePalette = resources.refinedPalette ?? research.colorPalette ?? {};
     const rawVars = await callGroq(
-      `Output ONLY a valid JSON array of exactly 5 objects. No markdown.
-Each: {"id":N,"name":"Two Word","palette":{"primary":"#hex","secondary":"#hex","bg":"#hex","text":"#hex"},"fontDisplay":"'FontName',sans-serif","animationStyle":"flicker|float|glitch|neon-glow|fade-in-up","spacingScale":"compact|normal|airy","shadowStyle":"neon|soft|flat","previewGradient":"linear-gradient(135deg,#hex 0%,#hex 100%)"}
-ids 0-4. All 5 visually distinct (dark, light, neon, muted, vibrant). Themed to subject.`,
-      `5 color themes for: ${prompt}`,
-      2400, 0.95
+      `You are the ARCHITECT agent — the final authority on visual theme selection.
+
+Your job: generate exactly 5 color themes for this website AND choose which one to activate.
+
+Rules:
+- Output ONLY a valid JSON array of exactly 5 objects. No markdown, no backticks, no prose.
+- Each object: {"id":N,"name":"Two Word","palette":{"primary":"#hex","secondary":"#hex","bg":"#hex","text":"#hex"},"fontDisplay":"'FontName',sans-serif","animationStyle":"flicker|float|glitch|neon-glow|fade-in-up","spacingScale":"compact|normal|airy","shadowStyle":"neon|soft|flat","previewGradient":"linear-gradient(135deg,#hex 0%,#hex 100%)","recommended":false}
+- ids 0–4. Make all 5 visually DISTINCT (authentic match, darker, lighter, neon/vivid, muted/elegant).
+- Set "recommended":true on EXACTLY ONE — the variant that most faithfully captures what the user asked for (e.g. if they said "orange site", recommended has orange as primary; if they said "yellow restaurant", recommended has warm yellow primary and light bg).
+- All other variants must have "recommended":false.
+- The recommended variant's palette MUST reflect the user's stated color/mood intent — do not pick a random one.`,
+      `User request: "${prompt}"\nAesthetic: ${research.aesthetic}\nSite type: ${research.siteType}\nBase palette from research+resourcer: ${JSON.stringify(basePalette)}\nImage theme: ${resources.imageTheme ?? prompt}`,
+      2800, 0.85
     );
-    const variantsData = JSON.parse(rawVars);
+    const cleanedVars = rawVars.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+    const variantsData = JSON.parse(cleanedVars);
+
     writeFileSync(variantsPath, JSON.stringify(variantsData, null, 2), "utf-8");
     writeFileSync(variantsTsPath,
-      `// Auto-generated by architect. Do not edit.\nexport type DesignVariant={id:number;name:string;palette:{primary:string;secondary:string;bg:string;text:string};fontDisplay:string;animationStyle:string;spacingScale:string;shadowStyle:string;previewGradient:string;};\nexport const DESIGN_VARIANTS:DesignVariant[]=${JSON.stringify(variantsData)};\n`,
+      `// Auto-generated by architect. Do not edit.\nexport type DesignVariant={id:number;name:string;palette:{primary:string;secondary:string;bg:string;text:string};fontDisplay:string;animationStyle:string;spacingScale:string;shadowStyle:string;previewGradient:string;recommended:boolean;};\nexport const DESIGN_VARIANTS:DesignVariant[]=${JSON.stringify(variantsData)};\n`,
       "utf-8"
     );
     logEvent("ARCHITECT", `${variantsData.length} color themes ready in template library`, "", C.yellow);
+
+    // ── Apply architect's recommended variant as the FINAL active theme ─────
+    const recommended = variantsData.find(v => v.recommended === true) ?? variantsData[0];
+    const rp = recommended.palette;
+    const rfont = recommended.fontDisplay ?? font;
+    const onPrimaryR   = luminance(rp.primary)   > 0.45 ? "#000000" : "#ffffff";
+    const onSecondaryR = luminance(rp.secondary) > 0.45 ? "#000000" : "#ffffff";
+    const rootBlockFinal = `:root {\n  --color-primary: ${rp.primary};\n  --color-secondary: ${rp.secondary};\n  --color-bg: ${rp.bg};\n  --color-text: ${rp.text};\n  --color-nav-text: ${rp.text};\n  --color-hero-text: ${rp.text};\n  --color-on-primary: ${onPrimaryR};\n  --color-on-secondary: ${onSecondaryR};\n  --font-display: ${rfont};\n}`;
+    const finalCss = FULL_GLOBALS_CSS_TEMPLATE.replace(/:root\s*\{[^}]+\}/s, rootBlockFinal);
+    writeFileSync(cssPath, finalCss, "utf-8");
+    logEvent("ARCHITECT", `Active theme: "${recommended.name}" — primary:${rp.primary} bg:${rp.bg} font:${rfont}`, "", C.yellow);
   } catch (e) {
-    logEvent("ARCHITECT", `Color variants failed: ${e.message}`, "", C.red);
+    logEvent("ARCHITECT", `Color variants/theme selection failed: ${e.message}`, "", C.red);
+    // Stage 4b fallback is already on disk — site will still render with interim palette
   }
 
   logHandoff("ARCHITECT", "PREVIEW", "launch");
@@ -2677,26 +3614,47 @@ function speak(text) {
   );
 }
 
+// Ensure API server is running, resolving once it is actually listening.
+function ensureApiServer() {
+  return new Promise((resolve) => {
+    if (_apiServer && _apiServer.listening) { resolve(); return; }
+    startApiServerIfNeeded();
+    // Poll until listening (normally < 50 ms)
+    const check = setInterval(() => {
+      if (_apiServer && _apiServer.listening) { clearInterval(check); resolve(); }
+    }, 20);
+    // Give up after 3 s and continue anyway
+    setTimeout(() => { clearInterval(check); resolve(); }, 3000);
+  });
+}
+
 // STT: open browser voice agent page, wait for transcription via /voice-result
 // Uses the browser's Web Speech API (Google-backed) — far more accurate than SAPI.
-function listenVoice(timeoutSecs = 60) {
+async function listenVoice(timeoutSecs = 90) {
+  await ensureApiServer();
+
   return new Promise((resolve) => {
-    // Ensure the API server is up so the /voice and /voice-result routes exist
-    startApiServerIfNeeded();
+    let done = false;
 
-    // Reject/timeout if nothing comes back in time
-    const timer = setTimeout(() => {
-      _pendingVoiceResolve = null;
-      resolve("");
-    }, timeoutSecs * 1000);
-
-    _pendingVoiceResolve = (text) => {
+    const finish = (text) => {
+      if (done) return;
+      done = true;
       clearTimeout(timer);
+      _voiceEvents.removeListener("transcription", finish);
       resolve(text);
     };
 
-    // Open the browser tab — Windows `start` command works for this
-    exec(`start http://localhost:3002/voice`, () => {});
+    const timer = setTimeout(() => {
+      process.stderr.write(`${C.dim}[voice-agent] timeout after ${timeoutSecs}s${C.reset}\n`);
+      finish("");
+    }, timeoutSecs * 1000);
+
+    _voiceEvents.once("transcription", finish);
+
+    // Open the browser tab — Windows `start` command opens default browser
+    exec(`start http://localhost:3002/voice`, (err) => {
+      if (err) process.stderr.write(`[voice-agent] could not open browser: ${err.message}\n`);
+    });
   });
 }
 

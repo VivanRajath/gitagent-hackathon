@@ -305,18 +305,42 @@ export default function SpatialVoiceOverlay() {
   }, [mpStatus, editMode]);
 
   // ── Push-to-talk ─────────────────────────────────────────────────────────
-  const sendCommand = useCallback((payload: string, label: string) => {
+  const sendCommand = useCallback(async (payload: string, label: string) => {
     if (busyRef.current) return;
     busyRef.current = true; setBusy(true);
     addLog('YOU', label); setChatOpen(true);
     setTimeout(() => addLog('ORCHESTRATOR', 'Routing…'), 350);
-    fetch('http://localhost:3002/command', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: payload }),
-    })
-      .then(() => addLog('JNR-DEV', 'Done!'))
-      .catch(() => addLog('SYS', 'Agent unreachable'))
-      .finally(() => setTimeout(() => { busyRef.current = false; setBusy(false); }, 2000));
+    try {
+      const resp = await fetch('http://localhost:3002/voice-edit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: payload }),
+      });
+      if (!resp.body) throw new Error('No response stream');
+      const reader  = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let full = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        full += decoder.decode(value, { stream: true });
+      }
+      // Show meaningful result lines in the chat log
+      const lines = full.split('\n').map(l => l.trim()).filter(Boolean);
+      const summary = lines.find(l =>
+        l.startsWith('[UIUX]') || l.startsWith('[JNR-DEV]') ||
+        l.startsWith('[voice-edit]') || l.startsWith('[warn]') ||
+        l.startsWith('[BLOCKED]') || l.startsWith('[done]')
+      ) ?? lines[lines.length - 1] ?? 'Done';
+      addLog('VOICE', summary);
+      // Force reload so Next.js HMR doesn't miss the CSS file write on Windows
+      if (full.includes('[reload]')) {
+        setTimeout(() => window.location.reload(), 900);
+      }
+    } catch {
+      addLog('SYS', 'Agent unreachable');
+    } finally {
+      setTimeout(() => { busyRef.current = false; setBusy(false); }, 1200);
+    }
   }, []);
 
   const startPTT = useCallback(() => {
@@ -326,33 +350,51 @@ export default function SpatialVoiceOverlay() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setHint('Voice API not supported'); holdingRef.current = false; setRecording(false); return; }
     const rec = new SR();
-    rec.continuous = false; rec.interimResults = false; rec.lang = 'en-US';
-    pttRecRef.current = rec;
+    rec.continuous     = false;
+    rec.interimResults = true;   // live text feedback while speaking
+    rec.lang           = 'en-US';
+    pttRecRef.current  = rec;
+    let finalTranscript = '';
 
     rec.onresult = (ev: any) => {
-      const result = ev.results[0][0];
-      const transcript = result.transcript.trim();
-      if (result.confidence < 0.45) { setHint("Didn't catch that — try again"); return; }
-      const t = transcript.toLowerCase();
-
-      if (t.includes('scroll down'))                                          { window.scrollBy({ top: 400, behavior: 'smooth' }); addLog('YOU', 'Scroll ↓'); return; }
-      if (t.includes('scroll up'))                                            { window.scrollBy({ top: -400, behavior: 'smooth' }); addLog('YOU', 'Scroll ↑'); return; }
-      if (t.includes('scroll to top') || t.includes('go to top'))            { window.scrollTo({ top: 0, behavior: 'smooth' }); addLog('YOU', '↑ Top'); return; }
-      if (t.includes('scroll to bottom') || t.includes('go to bottom'))      { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); addLog('YOU', '↓ Bottom'); return; }
-      if (t.includes('exit edit') || (t.includes('exit') && t.includes('editor'))) { closeEditMode(); return; }
-
-      sendCommand(transcript, transcript);
+      let interim = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) {
+          // Accept ALL final results — no confidence gate (Chrome returns 0 for many valid phrases)
+          finalTranscript = ev.results[i][0].transcript.trim();
+        } else {
+          interim = ev.results[i][0].transcript;
+        }
+      }
+      // Show live text so user can see the mic is hearing them
+      setHint(interim ? `🎙 "${interim}"` : finalTranscript ? `✓ "${finalTranscript}"` : '');
     };
 
     rec.onerror = (ev: any) => {
-      if (ev.error === 'no-speech')   setHint('No speech detected');
-      else if (ev.error === 'not-allowed') setHint('Mic blocked — click 🔒 to allow.');
+      if (ev.error === 'no-speech')        setHint('Nothing heard — try speaking louder');
+      else if (ev.error === 'not-allowed') setHint('Mic blocked — click 🔒 to allow mic');
       else if (ev.error !== 'aborted')     setHint('Mic error: ' + ev.error);
     };
+
+    // Dispatch commands in onend — fires after speech stops, finalTranscript is complete
     rec.onend = () => {
       holdingRef.current = false; setRecording(false); pttRecRef.current = null;
+      setHint('');
+      if (!finalTranscript) {
+        setHint('Nothing heard — hold button and speak clearly');
+        try { passiveRef.current?.start(); } catch {}
+        return;
+      }
+      const t = finalTranscript.toLowerCase();
+      if      (t.includes('scroll down'))                                          { window.scrollBy({ top: 400, behavior: 'smooth' });                      addLog('YOU', 'Scroll ↓'); }
+      else if (t.includes('scroll up'))                                            { window.scrollBy({ top: -400, behavior: 'smooth' });                     addLog('YOU', 'Scroll ↑'); }
+      else if (t.includes('scroll to top')    || t.includes('go to top'))         { window.scrollTo({ top: 0, behavior: 'smooth' });                        addLog('YOU', '↑ Top');    }
+      else if (t.includes('scroll to bottom') || t.includes('go to bottom'))      { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });addLog('YOU', '↓ Bottom'); }
+      else if (t.includes('exit edit') || (t.includes('exit') && t.includes('editor'))) { closeEditMode(); }
+      else { sendCommand(finalTranscript, finalTranscript); }
       try { passiveRef.current?.start(); } catch {}
     };
+
     try { rec.start(); } catch { holdingRef.current = false; setRecording(false); }
   }, [busy, sendCommand]);
 
@@ -452,7 +494,7 @@ export default function SpatialVoiceOverlay() {
           width: '120px', height: '90px',
         }}>
           <video
-            srcObject={camStreamRef.current}
+            ref={el => { if (el) el.srcObject = camStreamRef.current; }}
             autoPlay playsInline muted
             style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
           />
@@ -490,7 +532,8 @@ export default function SpatialVoiceOverlay() {
                 <b style={{
                   flexShrink: 0, color:
                     l.role === 'YOU' ? '#10b981' : l.role === 'SNR-DEV' ? '#06b6d4' :
-                    l.role === 'ORCHESTRATOR' ? '#a78bfa' : l.role === 'JNR-DEV' ? '#4ade80' : '#94a3b8',
+                    l.role === 'ORCHESTRATOR' ? '#a78bfa' : l.role === 'JNR-DEV' ? '#4ade80' :
+                    l.role === 'VOICE' ? '#f59e0b' : '#94a3b8',
                 }}>[{l.role}]</b>
                 <span style={{ opacity: 0.85, wordBreak: 'break-word' }}>{l.msg}</span>
               </div>

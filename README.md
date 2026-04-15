@@ -2,7 +2,7 @@
 
 > Built for the **gitagent Hackathon**. Defined using the [gitagent standard](https://github.com/open-gitagent/gitagent). Brought to life with [gitclaw](https://github.com/open-gitagent/gitclaw).
 
-A multi-agent system that scans any Git repository to detect its runtime and run instructions, then routes natural-language code-edit requests to tiered sub-agents to keep LLM costs proportional to task complexity. It autonomously generates themed Next.js websites from a single prompt using a four-stage AI pipeline, with images generated via **Gemini Imagen 3**, **Pollinations.ai**, and **Puter.js**.
+A multi-agent system that scans any Git repository to detect its runtime and run instructions, then routes natural-language code-edit requests to tiered sub-agents to keep LLM costs proportional to task complexity. It autonomously generates themed Next.js websites from a single prompt using a **five-stage AI pipeline**, with images generated via **Gemini Imagen 3**, **Pollinations.ai**, and **Puter.js**. After a site is generated, **voice commands** can edit individual CSS variables in real time via a dedicated voice-edit pipeline — no full rebuild needed.
 
 ---
 
@@ -16,11 +16,13 @@ you> create a hulk themed website
 
 And it orchestrates **23 specialized AI agents** across two modes:
 
-**Website Builder** — an architect plans the design, a researcher discovers the design DNA, an art director curates image themes and seeds, a copywriter fills every content zone, and an image agent generates AI visuals via Gemini Imagen 3 → Pollinations.ai → Puter.js. The result is a fully themed, live-reloading Next.js site on `localhost:3001`.
+**Website Builder** — an architect plans the design, a researcher discovers the design DNA (including intent-driven color palettes), an art director curates image themes and produces a `refinedPalette`, a copywriter fills every content zone, and an image agent generates AI visuals via Gemini Imagen 3 → Pollinations.ai → Puter.js. The architect then generates five design variants, marks one `recommended:true`, and writes the chosen palette to `globals.css`. The result is a fully themed, live-reloading Next.js site on `localhost:3001`.
 
 **Code Editing** — a guardrails squad blocks credential leaks and unsafe diffs, a research team finds prior art, and three developer tiers (jnr / snr / architect) apply edits with proportional model cost. A QA tester screenshots the result and dispatches fixes.
 
-Then you can edit the generated site by clicking elements and speaking, or by showing hand gestures to your webcam:
+**Voice Editing** — speak a change to the running site ("change navbar text to white", "make the background darker") and a 3-stage voice-edit pipeline applies only the requested CSS variable — no full rebuild. Zone-specific CSS variables (`--color-nav-text`, `--color-hero-text`) ensure that targeting "navbar text" never accidentally changes hero or body text.
+
+Then you can also edit the generated site by clicking elements and speaking, or by showing hand gestures to your webcam:
 
 - **Click** any element → it gets selected (orange highlight)
 - **Hold 🎙** → speak a natural-language edit ("make this text more dramatic")
@@ -95,9 +97,11 @@ repo-sandbox-agent/
     │       ├── web-searcher/
     │       └── solution-proposer/
     ├── website-builder/           # website generation pipeline
-    │   ├── research-agent/        # design DNA agent
-    │   ├── resourcer-agent/       # visual art direction agent
+    │   ├── research-agent/        # design DNA + intent-driven palette
+    │   ├── resourcer-agent/       # visual art direction + refinedPalette
     │   └── uiux-agent/            # copy + content agent
+    ├── voice-intent/              # voice-edit NLU — maps speech → CSS edits
+    ├── scope-validator/           # voice-edit safety — validates CSS field list
     ├── image-gen-agent/           # AI image + animation agent (shared)
     └── resourcer-agent/           # stock image + font resource agent
 ```
@@ -125,10 +129,13 @@ repo-sandbox-agent/
 | | `devpost-searcher` | Searches Devpost hackathon projects. |
 | | `web-searcher` | General web search fallback. |
 | | `solution-proposer` | Aggregates all search results into an actionable implementation proposal. |
-| **Website Builder** | `website-builder` | Pipeline orchestrator for AI website generation. |
-| | `wb/research-agent` | Extracts design DNA: site type, palette, layout variants, image keywords. |
-| | `wb/resourcer-agent` | Produces image theme phrase, per-zone seeds, and font choice. |
+| **Website Builder** | `website-builder` | Pipeline orchestrator for AI website generation (5 stages). |
+| | `wb/research-agent` | Extracts design DNA: site type, intent-driven palette, layout variants, image keywords. |
+| | `wb/resourcer-agent` | Produces image theme phrase, per-zone seeds, font, and `refinedPalette` override. |
 | | `wb/uiux-agent` | Writes all site copy: headlines, nav, cards, features, CTA, footer. |
+| | `wb/architect` | Generates 5 design variants, sets `recommended:true` on best match, writes palette to `globals.css`. |
+| **Voice Edit** | `voice-intent` | NLU layer for live voice editing. Maps natural language → `{ edits: [{field, value}] }`. |
+| | `scope-validator` | Safety gate for voice edits. Validates each CSS field against the allowed variable list. |
 | **Creative** | `image-gen-agent` | Crafts image prompts → Gemini Imagen 3 → Pollinations.ai → Puter.js config. Writes CSS @keyframes animations. |
 | | `resourcer-agent` | Curates Unsplash/Picsum images, WCAG-compliant color palettes, Google Font pairings. |
 
@@ -150,13 +157,31 @@ Type `/skills` in the REPL to list all available skills.
 |---|---|
 | Agent Standard | [gitagent](https://github.com/open-gitagent/gitagent) v0.1.0 |
 | Agent Runtime | [gitclaw](https://github.com/open-gitagent/gitclaw) SDK |
-| LLM Provider | Groq (Llama 4 Scout 17B · Llama 3.3 70B · Llama 3.1 8B) |
+| LLM Provider | Groq (Llama 3.3 70B primary · Llama 4 Scout 17B fallback · Llama 3.1 8B cheap tier) |
 | Generated Sites | Next.js 15 + Tailwind CSS |
 | Gesture Tracking | MediaPipe Vision (GestureRecognizer, CDN-loaded at runtime) |
 | AI Image Gen (primary) | Google Gemini Imagen 3 (`imagen-3.0-generate-002`) |
 | AI Image Gen (fallback) | Pollinations.ai (free, no API key required) |
 | AI Image Gen (client) | Puter.js `puter.ai.txt2img()` via `puter-image-config.js` |
 | Stock Images | Unsplash Source, Picsum Photos |
+
+---
+
+## CSS Variable System
+
+The generated site uses zone-isolated CSS custom properties so voice edits are surgical:
+
+| Variable | Zone | Changed by |
+|---|---|---|
+| `--color-bg` | Page background | "change background" |
+| `--color-primary` | Buttons, accents, highlights | "change primary color" |
+| `--color-secondary` | Hero headline, section titles | "change secondary / hero title color" |
+| `--color-text` | Body / card text | "change all text" (global only) |
+| `--color-nav-text` | Navbar links & labels | "change navbar text to …" |
+| `--color-hero-text` | Hero subtext & body copy | "change hero text to …" |
+| `--font-display` | Heading / display font | "change the font to …" |
+
+Saying "change navbar text to white" patches **only** `--color-nav-text` — hero and body text are unaffected.
 
 ---
 

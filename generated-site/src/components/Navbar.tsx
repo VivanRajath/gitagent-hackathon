@@ -22,7 +22,7 @@ function NavClassic({ brand, links }: NavProps) {
       <ul style={{display:'flex',gap:'2rem',margin:0,padding:0,listStyle:'none'}}>
         {links.map(l => (
           <li key={l.href}>
-            <Link href={l.href} className="nav-link" style={{color:'var(--color-text)',fontWeight:600,fontSize:'0.9rem'}}>
+            <Link href={l.href} className="nav-link" style={{color:'var(--color-nav-text)',fontWeight:600,fontSize:'0.9rem'}}>
               {l.label}
             </Link>
           </li>
@@ -48,7 +48,7 @@ function NavCentered({ brand, links }: NavProps) {
       <ul style={{display:'flex',gap:'2rem',margin:0,padding:0,listStyle:'none',justifyContent:'flex-end'}}>
         {left.map(l => (
           <li key={l.href}>
-            <Link href={l.href} className="nav-link" style={{color:'var(--color-text)',fontWeight:600,fontSize:'0.9rem'}}>{l.label}</Link>
+            <Link href={l.href} className="nav-link" style={{color:'var(--color-nav-text)',fontWeight:600,fontSize:'0.9rem'}}>{l.label}</Link>
           </li>
         ))}
       </ul>
@@ -63,7 +63,7 @@ function NavCentered({ brand, links }: NavProps) {
       <ul style={{display:'flex',gap:'2rem',margin:0,padding:0,listStyle:'none'}}>
         {right.map(l => (
           <li key={l.href}>
-            <Link href={l.href} className="nav-link" style={{color:'var(--color-text)',fontWeight:600,fontSize:'0.9rem'}}>{l.label}</Link>
+            <Link href={l.href} className="nav-link" style={{color:'var(--color-nav-text)',fontWeight:600,fontSize:'0.9rem'}}>{l.label}</Link>
           </li>
         ))}
       </ul>
@@ -101,12 +101,12 @@ function NavAnimated({ brand, links }: NavProps) {
         {links.map(l => (
           <li key={l.href}>
             <Link href={l.href} style={{
-              color:'var(--color-text)',fontWeight:500,fontSize:'0.8rem',textDecoration:'none',
+              color:'var(--color-nav-text)',fontWeight:500,fontSize:'0.8rem',textDecoration:'none',
               padding:'0.35rem 0.85rem',borderRadius:'9999px',
               border:'1px solid rgba(255,255,255,0.1)',display:'block',transition:'all 0.15s',
             }}
             onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style,{background:'var(--color-primary)',borderColor:'var(--color-secondary)',color:'var(--color-secondary)'})}
-            onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style,{background:'transparent',borderColor:'rgba(255,255,255,0.1)',color:'var(--color-text)'})}>
+            onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style,{background:'transparent',borderColor:'rgba(255,255,255,0.1)',color:'var(--color-nav-text)'})}>
               {l.label}
             </Link>
           </li>
@@ -135,7 +135,7 @@ function NavGlassCTA({ brand, links }: NavProps) {
       <ul style={{display:'flex',gap:'1.75rem',margin:0,padding:0,listStyle:'none'}}>
         {links.map(l => (
           <li key={l.href}>
-            <Link href={l.href} className="nav-link" style={{color:'var(--color-text)',fontWeight:500,fontSize:'0.875rem'}}>{l.label}</Link>
+            <Link href={l.href} className="nav-link" style={{color:'var(--color-nav-text)',fontWeight:500,fontSize:'0.875rem'}}>{l.label}</Link>
           </li>
         ))}
       </ul>
@@ -192,7 +192,7 @@ function NavMinimal({ brand, links }: NavProps) {
           <p style={{color:'var(--color-secondary)',fontSize:'0.65rem',letterSpacing:'0.15em',marginBottom:'1rem',opacity:0.6}}>NAVIGATION</p>
           {links.map(l => (
             <Link key={l.href} href={l.href} onClick={() => setOpen(false)} style={{
-              color:'var(--color-text)',fontWeight:700,fontSize:'1.15rem',
+              color:'var(--color-nav-text)',fontWeight:700,fontSize:'1.15rem',
               textDecoration:'none',padding:'0.85rem 0',
               borderBottom:'1px solid rgba(255,255,255,0.05)',transition:'color 0.15s',
             }}
